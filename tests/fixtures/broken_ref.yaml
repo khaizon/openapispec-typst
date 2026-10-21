@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info:
+  title: Broken Reference API
+  version: 1.0.0
+paths:
+  /broken:
+    get:
+      summary: Broken
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoesNotExist'

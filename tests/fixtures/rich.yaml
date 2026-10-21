@@ -1,0 +1,246 @@
+openapi: 3.1.0
+info:
+  title: Widget Service
+  version: 2.5.0
+  description: Fixture exercising composition, recursion, enums and media types.
+  contact:
+    name: QA Team
+    email: qa@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.example.com/{version}
+    description: Fixture server
+    variables:
+      version:
+        default: v2
+        enum: [v1, v2]
+tags:
+  - name: Widgets
+    description: Widget management
+  - name: Declared Only
+    description: Declared but unused tag section
+security:
+  - bearerAuth: []
+paths:
+  /widgets:
+    parameters:
+      - $ref: '#/components/parameters/TraceHeader'
+    get:
+      operationId: listWidgets
+      summary: List Widgets
+      tags: [Widgets]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: A page of widgets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Widget'
+                  next:
+                    type: [string, "null"]
+        "4XX":
+          $ref: '#/components/responses/Shared4XX'
+        "5XX":
+          $ref: '#/components/responses/Shared5XX'
+    post:
+      operationId: createWidget
+      summary: Create Widget
+      tags: [Widgets]
+      security:
+        - apiKeyAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttachmentUpload'
+            examples:
+              upload:
+                summary: Upload a widget attachment
+                value:
+                  file: widget.bin
+                  note: test upload
+      responses:
+        "201":
+          description: Created without a body
+        "400":
+          description: Bad request with no content
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /widgets/{widgetId}:
+    get:
+      operationId: getWidget
+      summary: Get Widget
+      tags: [Widgets]
+      parameters:
+        - name: widgetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The widget tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        "204":
+          description: No content
+  /widgets/{widgetId}/compose:
+    post:
+      operationId: composeWidget
+      summary: Compose Widget
+      tags: [Widgets]
+      parameters:
+        - name: widgetId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Widget'
+                - $ref: '#/components/schemas/AttachmentUpload'
+              examples:
+                widget:
+                  summary: A complete widget
+                  value:
+                    id: w1
+                    name: demo
+                    children: []
+      responses:
+        "200":
+          description: Composed
+          content:
+            text/plain:
+              schema:
+                type: string
+  /untagged:
+    get:
+      operationId: untagged
+      summary: Untagged Operation
+      responses:
+        "200":
+          description: OK
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  parameters:
+    TraceHeader:
+      name: X-Trace-Id
+      in: header
+      required: false
+      description: Correlation id
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Shared4XX:
+      description: Client error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Shared5XX:
+      description: Server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Base:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Widget:
+      allOf:
+        - $ref: '#/components/schemas/Base'
+        - type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+            kind:
+              type: string
+              enum: [basic, advanced]
+            labels:
+              type: object
+              additionalProperties:
+                type: string
+            children:
+              type: array
+              items:
+                $ref: '#/components/schemas/Node'
+            freeform:
+              type: object
+              additionalProperties: true
+    Node:
+      type: object
+      properties:
+        id:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Node'
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    AttachmentUpload:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+        note:
+          type: string
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string

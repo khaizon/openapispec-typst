@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PocketDex API 1.0.0 — API Reference</title>
+<meta name="description" content="OpenAPI 3.1.0 reference for PocketDex API.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0A1224;
+    --ink-2: #101B3B;
+    --paper: #F3F5F9;
+    --card: #FFFFFF;
+    --accent: #2C46D6;
+    --teal: #63E6D3;
+    --muted: #64708A;
+    --line: #E4E8F0;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding: 1.1rem 1.6rem 1.05rem;
+    background: linear-gradient(120deg, var(--ink), var(--ink-2));
+    color: #F8FAFF;
+    border-bottom: 3px solid var(--teal);
+  }
+  .kicker {
+    font-family: Montserrat, sans-serif;
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .22em;
+    color: #8FA6FF;
+  }
+  header h1 {
+    margin: .25rem 0 0;
+    font-family: Montserrat, sans-serif;
+    font-size: clamp(1.15rem, 2.4vw, 1.6rem);
+    font-weight: 700;
+    letter-spacing: -.015em;
+    line-height: 1.15;
+  }
+  .meta {
+    display: flex;
+    gap: .55rem;
+    flex-wrap: wrap;
+    margin-left: auto;
+    font-size: .72rem;
+    color: #C3CDE6;
+  }
+  .meta span {
+    border: 1px solid #FFFFFF26;
+    border-radius: 999px;
+    padding: .3rem .6rem;
+    white-space: nowrap;
+  }
+  .download {
+    font-family: Montserrat, sans-serif;
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--ink);
+    background: var(--teal);
+    border-radius: .45rem;
+    padding: .6rem 1rem;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .download:hover { transform: translateY(-1px); box-shadow: 0 6px 18px #63e6d34d; }
+  main {
+    flex: 1;
+    padding: 1.1rem 1.4rem;
+    min-height: 0;
+  }
+  .frame {
+    height: 100%;
+    min-height: calc(100vh - 190px);
+    overflow: hidden;
+    border-radius: .65rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 12px 34px rgba(10, 18, 36, .14);
+  }
+  iframe { display: block; width: 100%; height: 100%; min-height: calc(100vh - 190px); border: 0; }
+  footer {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: .55rem 1.6rem .7rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: .66rem;
+    color: var(--muted);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 720px) {
+    header { align-items: flex-start; }
+    .meta { margin-left: 0; }
+    .download { margin-left: auto; }
+    .frame, iframe { min-height: calc(100vh - 250px); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="kicker">API REFERENCE</div>
+    <h1>PocketDex API</h1>
+  </div>
+  <div class="meta">
+    <span>v1.0.0</span>
+    <span>OpenAPI 3.1.0</span>
+    <span>14 endpoints · 47 schemas</span>
+  </div>
+  <a class="download" href="pocketdex.pdf" download>Download PDF</a>
+</header>
+<main>
+  <div class="frame">
+    <iframe src="pocketdex.pdf#view=FitH" title="PocketDex API API reference (PDF)"></iframe>
+  </div>
+</main>
+<footer>
+  <span>Generated 2026-10-21 · typst · openapi-typst</span>
+  <a href="pocketdex.pdf">Open PDF in a new tab ↗</a>
+</footer>
+</body>
+</html>

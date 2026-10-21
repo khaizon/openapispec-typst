@@ -1,0 +1,29 @@
+{
+  "name": "openapispec-typst",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turn an OpenAPI 3.1 document into a polished PDF API reference with Typst",
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "prebuild": "npm run typecheck",
+    "check": "tsx --test tests/*.test.ts",
+    "test": "npm run check",
+    "serve": "tsx scripts/serve.ts",
+    "postinstall": "tsx scripts/setup-typst.ts",
+    "fmt": "typstyle -i templates/",
+    "fmt:check": "typstyle --check templates/",
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"import('node:fs').then(fs=>{fs.rmSync('build/generated',{recursive:true,force:true});fs.rmSync('build/pocketdex.tmp.pdf',{force:true});})\""
+  },
+  "dependencies": {
+    "@flukxr/typst-cli": "^0.15.1-npm.0",
+    "typst": "^0.10.0-8",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

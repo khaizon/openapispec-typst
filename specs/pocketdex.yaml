@@ -1,0 +1,1584 @@
+openapi: 3.1.0
+info:
+  title: PocketDex API
+  version: 1.0.0
+  description: >-
+    A fictional Pokédex-style API used as the privacy-safe reference document
+    for this OpenAPI-to-Typst template. Every species, trainer, region and item
+    below is invented for demonstration purposes.
+  termsOfService: https://example.com/terms
+  contact:
+    name: PocketDex Demo Team
+    email: hello@example.com
+  license:
+    name: CC-BY-4.0
+    url: https://creativecommons.org/licenses/by/4.0/
+servers:
+  - url: https://api.pocketdex.example
+    description: Demo server (not a real service)
+security:
+  - TrainerToken: []
+tags:
+  - name: Trainers
+    description: Trainer profiles, registration and party management.
+  - name: Species
+    description: Species discovery, detail pages and battle statistics.
+  - name: Encounters
+    description: Record wild encounters and follow asynchronous orders.
+  - name: Regions
+    description: Regions, habitats and the routes inside them.
+  - name: Items
+    description: Item catalogue browsing and catalogue imports.
+paths:
+  /api/v1/auth/login:
+    post:
+      operationId: loginTrainer
+      summary: Trainer Login
+      description: >-
+        Exchange trainer credentials for a bearer token.
+
+        Use the returned token in the Authorization header for every other
+        endpoint. The demo service accepts the credentials shown in the example.
+      tags: [Trainers]
+      security:
+        - BasicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainerLogin'
+            examples:
+              demoLogin:
+                summary: Demo trainer login
+                value:
+                  username: mira.vale
+                  password: demo-password
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainerTokenResponse'
+              examples:
+                loginSuccess:
+                  summary: Bearer token issued
+                  value:
+                    token: pkdx_demo_7f4c2a
+                    expiresAt: '2026-12-31T23:59:59Z'
+                    trainer:
+                      trainerId: trn_mira
+                      displayName: Mira Vale
+                      region: Lumen Vale
+        '401':
+          description: Invalid trainer credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyAuthError'
+              examples:
+                legacyUnauthorized:
+                  summary: Legacy authentication error
+                  value:
+                    - error: pokedex.auth.invalid_credentials
+                      message: The trainer name or password is incorrect.
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/trainers:
+    post:
+      operationId: registerTrainer
+      summary: Register Trainer
+      description: >-
+        Create a trainer profile.
+
+        Registration is synchronous. Party management is available immediately
+        after the profile is created.
+      tags: [Trainers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainerRegistration'
+            examples:
+              mira:
+                summary: Register a collector
+                value:
+                  displayName: Mira Vale
+                  homeRegion: Lumen Vale
+                  favoriteType: GRASS
+                  starterSpeciesId: spc_leafling
+              tomo:
+                summary: Register a battler
+                value:
+                  displayName: Tomo Reed
+                  homeRegion: Cinder Coast
+                  favoriteType: FIRE
+                  starterSpeciesId: spc_emberling
+              nia:
+                summary: Register a researcher
+                value:
+                  displayName: Nia Sol
+                  homeRegion: Frostmere
+                  favoriteType: ICE
+                  starterSpeciesId: spc_frosthorn
+              minimal:
+                summary: Register with the minimum fields
+                value:
+                  displayName: New Trainer
+                  homeRegion: Lumen Vale
+                  favoriteType: NORMAL
+      responses:
+        '201':
+          description: Trainer profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainerCreatedResponse'
+              examples:
+                created:
+                  summary: New trainer profile
+                  value:
+                    trainerId: trn_mira
+                    displayName: Mira Vale
+                    homeRegion: Lumen Vale
+                    favoriteType: GRASS
+                    createdAt: '2026-02-14T09:30:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/trainers/{trainerId}/party:
+    patch:
+      operationId: updateTrainerParty
+      summary: Update Trainer Party
+      description: >-
+        Replace the active party for a trainer.
+
+        The party may contain at most six members. The request is idempotent for
+        the same trainer and payload.
+      tags: [Trainers]
+      parameters:
+        - $ref: '#/components/parameters/TrainerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainerPartyUpdate'
+            examples:
+              balanced:
+                summary: Balanced party
+                value:
+                  party:
+                    - speciesId: spc_emberling
+                      level: 24
+                      role: ATTACKER
+                    - speciesId: spc_aquafin
+                      level: 22
+                      role: SUPPORT
+                  favoriteType: FIRE
+              defensive:
+                summary: Defensive party
+                value:
+                  party:
+                    - speciesId: spc_rocklet
+                      level: 30
+                      role: TANK
+                    - speciesId: spc_leafling
+                      level: 28
+                      role: SUPPORT
+                  favoriteType: ROCK
+      responses:
+        '200':
+          description: Trainer party replaced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainerPartyResponse'
+              examples:
+                updatedParty:
+                  summary: Updated party
+                  value:
+                    trainerId: trn_mira
+                    capacity: 6
+                    party:
+                      - speciesId: spc_emberling
+                        level: 24
+                        role: ATTACKER
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/species:
+    get:
+      operationId: listSpecies
+      summary: List Species
+      description: >-
+        Browse the species catalogue with pagination, sorting and optional
+        habitat and type filters.
+      tags: [Species]
+      parameters:
+        - $ref: '#/components/parameters/PageNo'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortOrder'
+        - name: type
+          in: query
+          required: false
+          description: Filter by primary species type.
+          schema:
+            $ref: '#/components/schemas/PokemonType'
+        - name: habitat
+          in: query
+          required: false
+          description: Filter by habitat name.
+          schema:
+            type: string
+            example: Sunlit Meadow
+      responses:
+        '200':
+          description: A page of species
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeciesPage'
+              examples:
+                speciesPage:
+                  summary: First page of species
+                  value:
+                    items:
+                      - speciesId: spc_emberling
+                        name: Emberling
+                        types: [FIRE]
+                        habitat: Ember Cavern
+                        rarity: UNCOMMON
+                      - speciesId: spc_aquafin
+                        name: Aquafin
+                        types: [WATER]
+                        habitat: Mistwood
+                        rarity: COMMON
+                    pagination:
+                      pageNo: 1
+                      pageSize: 20
+                      total: 42
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/species/{speciesId}:
+    get:
+      operationId: getSpecies
+      summary: Get Species
+      description: >-
+        Return the complete species record, including abilities, base stats and
+        evolution information.
+      tags: [Species]
+      parameters:
+        - $ref: '#/components/parameters/SpeciesId'
+      responses:
+        '200':
+          description: Species detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeciesResponse'
+              examples:
+                emberling:
+                  summary: Emberling detail
+                  value:
+                    data:
+                      speciesId: spc_emberling
+                      name: Emberling
+                      types: [FIRE]
+                      habitat: Ember Cavern
+                      rarity: UNCOMMON
+                      description: A small fox-like species that stores warmth in its tail.
+                      heightM: 0.6
+                      weightKg: 7.4
+                      abilities: [Kindle, Warm Coat]
+                      stats:
+                        hp: 45
+                        attack: 60
+                        defense: 40
+                        speed: 65
+                        special: 55
+                        total: 265
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/species/{speciesId}/stats:
+    get:
+      operationId: getSpeciesStats
+      summary: Get Species Stats
+      description: Return the base battle statistics for a species.
+      tags: [Species]
+      parameters:
+        - $ref: '#/components/parameters/SpeciesId'
+      responses:
+        '200':
+          description: Species statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeciesStatsResponse'
+              examples:
+                stats:
+                  summary: Emberling base stats
+                  value:
+                    hp: 45
+                    attack: 60
+                    defense: 40
+                    speed: 65
+                    special: 55
+                    total: 265
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v2/species/{speciesId}/stats:
+    get:
+      operationId: getSpeciesStatsV2
+      summary: Get Species Stats
+      description: Return base statistics plus the latest balance revision details.
+      tags: [Species]
+      parameters:
+        - $ref: '#/components/parameters/SpeciesId'
+      responses:
+        '200':
+          description: Species statistics with revision metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/V2SpeciesStatsResponse'
+              examples:
+                statsV2:
+                  summary: Emberling stats with balance revision
+                  value:
+                    hp: 45
+                    attack: 60
+                    defense: 40
+                    speed: 65
+                    special: 55
+                    total: 265
+                    balanceRevision: r7
+                    updatedAt: '2026-03-01T00:00:00Z'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/species/legacy-search:
+    get:
+      operationId: legacySpeciesSearch
+      summary: Legacy Species Search
+      description: Search species by name. This endpoint is retained for older clients.
+      deprecated: true
+      tags: [Species]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Partial species name.
+          schema:
+            type: string
+            minLength: 1
+            example: ember
+      responses:
+        '200':
+          description: Matching species
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeciesSummaryList'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/encounters:
+    post:
+      operationId: recordEncounter
+      summary: Record Encounter
+      description: >-
+        Queue a wild encounter report.
+
+        The service processes encounters asynchronously and returns an order
+        identifier that can be used to poll for progress.
+      tags: [Encounters]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/SingleEncounterRequest'
+                - $ref: '#/components/schemas/PartyEncounterRequest'
+                - $ref: '#/components/schemas/RouteEncounterRequest'
+            examples:
+              single:
+                summary: Single wild encounter
+                value:
+                  speciesId: spc_emberling
+                  level: 12
+                  location: Ember Cavern
+              party:
+                summary: Party encounter
+                value:
+                  members:
+                    - speciesId: spc_aquafin
+                      level: 11
+                    - speciesId: spc_leafling
+                      level: 10
+                  location: Mistwood
+              route:
+                summary: Route sweep
+                value:
+                  routeId: rte_west_meadow
+                  count: 5
+                  location: Sunlit Meadow
+      responses:
+        '202':
+          $ref: '#/components/responses/AcceptedOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/encounters/{orderId}:
+    get:
+      operationId: getEncounterOrder
+      summary: Get Encounter Order
+      description: Poll the status of a previously submitted encounter order.
+      tags: [Encounters]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Encounter order status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterOrderResponse'
+              examples:
+                queued:
+                  summary: Queued order
+                  value:
+                    orderId: ord_demo_0001
+                    status: QUEUED
+                    submittedAt: '2026-04-01T10:00:00Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/regions/{regionId}/habitats:
+    get:
+      operationId: listRegionHabitats
+      summary: List Region Habitats
+      description: List habitats for a region, including nested sub-habitats.
+      tags: [Regions]
+      parameters:
+        - $ref: '#/components/parameters/RegionId'
+      responses:
+        '200':
+          description: Region habitats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitatListResponse'
+              examples:
+                habitats:
+                  summary: Lumen Vale habitats
+                  value:
+                    regionId: reg_lumen
+                    items:
+                      - habitatId: hab_meadow
+                        name: Sunlit Meadow
+                        climate: TEMPERATE
+                        children:
+                          - habitatId: hab_west_meadow
+                            name: West Meadow
+                            climate: TEMPERATE
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/items:
+    get:
+      operationId: listItems
+      summary: List Items
+      description: Browse the item catalogue by category.
+      tags: [Items]
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Filter by item category.
+          schema:
+            $ref: '#/components/schemas/ItemCategory'
+        - $ref: '#/components/parameters/PageNo'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: A page of items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPage'
+              examples:
+                items:
+                  summary: Medicine and berries
+                  value:
+                    items:
+                      - itemId: itm_glow_salve
+                        name: Glow Salve
+                        category: MEDICINE
+                        cost: 320
+                      - itemId: itm_cinder_berry
+                        name: Cinder Berry
+                        category: BERRY
+                        cost: 80
+                    pagination:
+                      pageNo: 1
+                      pageSize: 20
+                      total: 2
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/items/import:
+    post:
+      operationId: importItemCatalogue
+      summary: Import Item Catalogue
+      description: >-
+        Upload a CSV item catalogue.
+
+        The import is processed synchronously; a successful import returns no
+        response body.
+      tags: [Items]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+            examples:
+              catalogue:
+                summary: Small CSV catalogue
+                value:
+                  file: item-catalogue.csv
+              replacement:
+                summary: Replacement catalogue
+                value:
+                  file: item-catalogue-v2.csv
+                  replaceExisting: true
+      responses:
+        '204':
+          description: Created (No Content)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+  /api/v1/breeding/pairs:
+    get:
+      operationId: listBreedingPairs
+      summary: List Breeding Pairs
+      description: List compatible breeding pairs discovered by the demo service.
+      tags: [Breeding]
+      responses:
+        '200':
+          description: Breeding pairs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BreedingPairList'
+        '4XX':
+          $ref: '#/components/responses/ClientError'
+        '5XX':
+          $ref: '#/components/responses/ServerErrorRange'
+components:
+  securitySchemes:
+    TrainerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: PocketDex token
+      description: Bearer token returned by the login endpoint.
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: Trainer credentials used only to obtain a bearer token.
+  parameters:
+    PageNo:
+      name: pageNo
+      in: query
+      required: false
+      description: Page number, starting at 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+        example: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: Number of items per page.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+        example: 20
+    SortBy:
+      name: sortBy
+      in: query
+      required: false
+      description: Field used for sorting.
+      schema:
+        type: string
+        enum: [name, rarity, speciesId]
+        default: name
+    SortOrder:
+      name: sortOrder
+      in: query
+      required: false
+      description: Sort direction.
+      schema:
+        $ref: '#/components/schemas/SortOrder'
+    TrainerId:
+      name: trainerId
+      in: path
+      required: true
+      description: Stable trainer identifier.
+      schema:
+        type: string
+        pattern: '^trn_[a-z0-9_]+$'
+        example: trn_mira
+    SpeciesId:
+      name: speciesId
+      in: path
+      required: true
+      description: Stable species identifier.
+      schema:
+        type: string
+        example: spc_emberling
+    RegionId:
+      name: regionId
+      in: path
+      required: true
+      description: Stable region identifier.
+      schema:
+        type: string
+        example: reg_lumen
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: Encounter order identifier.
+      schema:
+        type: string
+        example: ord_demo_0001
+  responses:
+    BadRequest:
+      description: Bad request error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            badRequest:
+              summary: Bad Request (400)
+              value:
+                error: pokedex.bad_request
+                message: The request could not be understood.
+                details:
+                  - userMessage: Check the request body and try again.
+    Unauthorized:
+      description: Unauthorized error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            unauthorized:
+              summary: Unauthorized (401)
+              value:
+                error: pokedex.unauthorized
+                message: A valid trainer token is required.
+                details:
+                  - userMessage: Sign in again and retry the request.
+    Forbidden:
+      description: Forbidden error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            forbidden:
+              summary: Forbidden (403)
+              value:
+                error: pokedex.forbidden
+                message: This trainer cannot access that record.
+    NotFound:
+      description: Resource not found error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            resourceNotFound:
+              summary: Not Found (404)
+              value:
+                error: pokedex.not_found
+                message: The requested record does not exist.
+                details:
+                  - userMessage: Check the identifier and try again.
+    Conflict:
+      description: Conflict error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            conflict:
+              summary: Conflict (409)
+              value:
+                error: pokedex.conflict
+                message: A record with that name already exists.
+    InvalidInput:
+      description: Input validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            invalidInput:
+              summary: Invalid Input (422)
+              value:
+                error: pokedex.invalid_input
+                message: One or more fields are invalid.
+                details:
+                  - userMessage: favoriteType must be a known type.
+    TooManyRequests:
+      description: Rate limit error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            tooManyRequests:
+              summary: Too Many Requests (429)
+              value:
+                error: pokedex.rate_limited
+                message: Too many requests were sent in a short period.
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+          examples:
+            serverError:
+              summary: Internal Server Error (500)
+              value:
+                error: pokedex.internal_error
+                message: An unexpected error occurred.
+    ClientError:
+      description: Client error range
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+    ServerErrorRange:
+      description: Server error range
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NewApiErrorResponse'
+    AcceptedOrder:
+      description: Accepted order response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AcceptedOrder'
+          examples:
+            orderAccepted:
+              summary: Encounter order queued
+              value:
+                orderId: ord_demo_0001
+                status: QUEUED
+                estimatedAt: '2026-04-01T10:00:05Z'
+  schemas:
+    PokemonType:
+      type: string
+      description: Elemental type used by species and moves.
+      enum: [FIRE, WATER, GRASS, ELECTRIC, ROCK, GHOST, FLYING, NORMAL, ICE]
+    Rarity:
+      type: string
+      description: Relative rarity of a species.
+      enum: [COMMON, UNCOMMON, RARE, LEGENDARY]
+    HabitatClimate:
+      type: string
+      description: Broad climate classification for a habitat.
+      enum: [TEMPERATE, ARID, TUNDRA, TROPICAL]
+    ItemCategory:
+      type: string
+      description: Functional category for an item.
+      enum: [MEDICINE, BALL, BERRY, KEY_ITEM, TM]
+    SortOrder:
+      type: string
+      description: Sort direction for list endpoints.
+      enum: [ASC, DESC]
+    EncounterStatus:
+      type: string
+      description: Processing state of an encounter order.
+      enum: [QUEUED, PROCESSING, COMPLETE, FAILED]
+    PartyRole:
+      type: string
+      description: Intended battle role for a party member.
+      enum: [ATTACKER, SUPPORT, TANK]
+    RegionGeneration:
+      type: string
+      description: Generation label for a region.
+      enum: [GEN1, GEN2, GEN3]
+    ErrorDetail:
+      type: object
+      description: A single human-readable error detail.
+      required: [userMessage]
+      properties:
+        userMessage:
+          type: string
+          description: Message suitable for display to a trainer.
+          example: Check the identifier and try again.
+    NewApiErrorResponse:
+      type: object
+      description: Standard error envelope used by most endpoints.
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Stable machine-readable error code.
+          example: pokedex.bad_request
+        message:
+          type: string
+          description: Human-readable summary of the failure.
+          example: The request could not be understood.
+        details:
+          type: array
+          description: Optional list of field-level details.
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+    LegacyAuthErrorItem:
+      type: object
+      description: Legacy authentication error item.
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Legacy error code.
+          example: pokedex.auth.invalid_credentials
+        message:
+          type: string
+          description: Legacy error message.
+          example: The trainer name or password is incorrect.
+    LegacyAuthError:
+      type: array
+      description: Legacy array-shaped authentication error.
+      items:
+        $ref: '#/components/schemas/LegacyAuthErrorItem'
+    Pagination:
+      type: object
+      description: Pagination metadata for a list response.
+      required: [pageNo, pageSize, total]
+      properties:
+        pageNo:
+          type: integer
+          minimum: 1
+          description: Current page number.
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Number of items per page.
+          example: 20
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of matching items.
+          example: 42
+    TrainerSummary:
+      type: object
+      description: Compact trainer reference used by nested responses.
+      required: [trainerId, displayName]
+      properties:
+        trainerId:
+          type: string
+          description: Stable trainer identifier.
+          example: trn_mira
+        displayName:
+          type: string
+          description: Public trainer name.
+          example: Mira Vale
+        region:
+          type: string
+          description: Home region name.
+          example: Lumen Vale
+    TrainerLogin:
+      type: object
+      description: Trainer credentials used to obtain a bearer token.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          description: Trainer username.
+          example: mira.vale
+        password:
+          type: string
+          description: Trainer password.
+          writeOnly: true
+          example: demo-password
+    TrainerToken:
+      type: object
+      description: Bearer token returned after a successful login.
+      required: [token, expiresAt]
+      properties:
+        token:
+          type: string
+          description: Bearer token value.
+          example: pkdx_demo_7f4c2a
+        expiresAt:
+          type: string
+          format: date-time
+          description: Token expiry timestamp.
+          example: '2026-12-31T23:59:59Z'
+        trainer:
+          $ref: '#/components/schemas/TrainerSummary'
+    TrainerTokenResponse:
+      type: object
+      description: Login response envelope.
+      required: [token, expiresAt]
+      properties:
+        token:
+          type: string
+          description: Bearer token value.
+          example: pkdx_demo_7f4c2a
+        expiresAt:
+          type: string
+          format: date-time
+          description: Token expiry timestamp.
+          example: '2026-12-31T23:59:59Z'
+        trainer:
+          $ref: '#/components/schemas/TrainerSummary'
+    TrainerRegistration:
+      type: object
+      description: Fields required to register a trainer.
+      required: [displayName, homeRegion, favoriteType]
+      properties:
+        displayName:
+          type: string
+          description: Public trainer name.
+          minLength: 2
+          maxLength: 40
+          example: Mira Vale
+        homeRegion:
+          type: string
+          description: Name of the trainer's home region.
+          example: Lumen Vale
+        favoriteType:
+          $ref: '#/components/schemas/PokemonType'
+        starterSpeciesId:
+          type: string
+          description: Optional starter species identifier.
+          example: spc_leafling
+    TrainerCreatedResponse:
+      type: object
+      description: Trainer profile returned after registration.
+      required: [trainerId, displayName, homeRegion, favoriteType]
+      properties:
+        trainerId:
+          type: string
+          description: Stable trainer identifier.
+          example: trn_mira
+        displayName:
+          type: string
+          description: Public trainer name.
+          example: Mira Vale
+        homeRegion:
+          type: string
+          description: Home region name.
+          example: Lumen Vale
+        favoriteType:
+          $ref: '#/components/schemas/PokemonType'
+        createdAt:
+          type: string
+          format: date-time
+          description: Registration timestamp.
+          example: '2026-02-14T09:30:00Z'
+    PartyMember:
+      type: object
+      description: A single Pokémon in a trainer party.
+      required: [speciesId, level]
+      properties:
+        speciesId:
+          type: string
+          description: Species identifier.
+          example: spc_emberling
+        nickname:
+          type: string
+          description: Optional nickname.
+          example: Cinder
+        level:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Current level.
+          example: 24
+        role:
+          $ref: '#/components/schemas/PartyRole'
+    TrainerParty:
+      type: object
+      description: A trainer's active party.
+      required: [trainerId, party]
+      properties:
+        trainerId:
+          type: string
+          description: Stable trainer identifier.
+          example: trn_mira
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: Maximum party size.
+          example: 6
+        party:
+          type: array
+          description: Active party members.
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/PartyMember'
+    TrainerPartyResponse:
+      type: object
+      description: Response wrapper for a trainer party.
+      properties:
+        trainerId:
+          type: string
+          description: Stable trainer identifier.
+          example: trn_mira
+        capacity:
+          type: integer
+          description: Maximum party size.
+          example: 6
+        party:
+          type: array
+          description: Active party members.
+          items:
+            $ref: '#/components/schemas/PartyMember'
+    TrainerPartyUpdate:
+      type: object
+      description: Replacement party payload.
+      required: [party]
+      properties:
+        party:
+          type: array
+          description: Replacement party members.
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/PartyMember'
+        favoriteType:
+          $ref: '#/components/schemas/PokemonType'
+        notes:
+          type: string
+          description: Optional trainer notes.
+          maxLength: 200
+          example: Keep the party balanced for cave routes.
+    SpeciesSummary:
+      type: object
+      description: Compact species record for list views.
+      required: [speciesId, name, types, rarity]
+      properties:
+        speciesId:
+          type: string
+          description: Stable species identifier.
+          example: spc_emberling
+        name:
+          type: string
+          description: Species name.
+          example: Emberling
+        types:
+          type: array
+          description: Elemental types.
+          items:
+            $ref: '#/components/schemas/PokemonType'
+        habitat:
+          type: string
+          description: Primary habitat name.
+          example: Ember Cavern
+        rarity:
+          $ref: '#/components/schemas/Rarity'
+    SpeciesStats:
+      type: object
+      description: Base battle statistics for a species.
+      required: [hp, attack, defense, speed, special, total]
+      properties:
+        hp:
+          type: integer
+          description: Base HP.
+          example: 45
+        attack:
+          type: integer
+          description: Base attack.
+          example: 60
+        defense:
+          type: integer
+          description: Base defense.
+          example: 40
+        speed:
+          type: integer
+          description: Base speed.
+          example: 65
+        special:
+          type: integer
+          description: Base special attack.
+          example: 55
+        total:
+          type: integer
+          description: Sum of all base stats.
+          example: 265
+    V2SpeciesStats:
+      type: object
+      description: Base stats with balance revision metadata.
+      required: [hp, attack, defense, speed, special, total, balanceRevision]
+      properties:
+        hp:
+          type: integer
+          description: Base HP.
+          example: 45
+        attack:
+          type: integer
+          description: Base attack.
+          example: 60
+        defense:
+          type: integer
+          description: Base defense.
+          example: 40
+        speed:
+          type: integer
+          description: Base speed.
+          example: 65
+        special:
+          type: integer
+          description: Base special attack.
+          example: 55
+        total:
+          type: integer
+          description: Sum of all base stats.
+          example: 265
+        balanceRevision:
+          type: string
+          description: Balance revision identifier.
+          example: r7
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last balance update.
+          example: '2026-03-01T00:00:00Z'
+    SpeciesStatsResponse:
+      type: object
+      description: Response wrapper for species stats.
+      properties:
+        hp:
+          type: integer
+          description: Base HP.
+          example: 45
+        attack:
+          type: integer
+          description: Base attack.
+          example: 60
+        defense:
+          type: integer
+          description: Base defense.
+          example: 40
+        speed:
+          type: integer
+          description: Base speed.
+          example: 65
+        special:
+          type: integer
+          description: Base special attack.
+          example: 55
+        total:
+          type: integer
+          description: Sum of all base stats.
+          example: 265
+    V2SpeciesStatsResponse:
+      type: object
+      description: Response wrapper for species stats with revision metadata.
+      properties:
+        hp:
+          type: integer
+          description: Base HP.
+          example: 45
+        attack:
+          type: integer
+          description: Base attack.
+          example: 60
+        defense:
+          type: integer
+          description: Base defense.
+          example: 40
+        speed:
+          type: integer
+          description: Base speed.
+          example: 65
+        special:
+          type: integer
+          description: Base special attack.
+          example: 55
+        total:
+          type: integer
+          description: Sum of all base stats.
+          example: 265
+        balanceRevision:
+          type: string
+          description: Balance revision identifier.
+          example: r7
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last balance update.
+          example: '2026-03-01T00:00:00Z'
+    SpeciesDetail:
+      allOf:
+        - $ref: '#/components/schemas/SpeciesSummary'
+        - type: object
+          required: [description, heightM, weightKg, abilities]
+          properties:
+            description:
+              type: string
+              description: Natural-history description.
+              example: A small fox-like species that stores warmth in its tail.
+            heightM:
+              type: number
+              format: float
+              description: Height in metres.
+              example: 0.6
+            weightKg:
+              type: number
+              format: float
+              description: Weight in kilograms.
+              example: 7.4
+            abilities:
+              type: array
+              description: Known abilities.
+              items:
+                type: string
+              example: [Kindle, Warm Coat]
+            stats:
+              $ref: '#/components/schemas/SpeciesStats'
+    SpeciesPage:
+      type: object
+      description: Paginated species list.
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          description: Species on this page.
+          items:
+            $ref: '#/components/schemas/SpeciesSummary'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    SpeciesResponse:
+      type: object
+      description: Response wrapper for a species detail.
+      properties:
+        data:
+          $ref: '#/components/schemas/SpeciesDetail'
+    SpeciesSummaryList:
+      type: object
+      description: Simple species list.
+      properties:
+        items:
+          type: array
+          description: Matching species.
+          items:
+            $ref: '#/components/schemas/SpeciesSummary'
+    TypeEffectiveness:
+      type: object
+      description: Effectiveness multipliers keyed by attacking type.
+      additionalProperties:
+        type: number
+        format: float
+    EncounterMember:
+      type: object
+      description: A species observed during a party encounter.
+      required: [speciesId, level]
+      properties:
+        speciesId:
+          type: string
+          description: Species identifier.
+          example: spc_aquafin
+        level:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Observed level.
+          example: 11
+    SingleEncounterRequest:
+      type: object
+      description: Record one wild encounter.
+      required: [speciesId, level, location]
+      properties:
+        speciesId:
+          type: string
+          description: Species identifier.
+          example: spc_emberling
+        level:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Observed level.
+          example: 12
+        location:
+          type: string
+          description: Free-text location label.
+          example: Ember Cavern
+    PartyEncounterRequest:
+      type: object
+      description: Record an encounter involving multiple species.
+      required: [members, location]
+      properties:
+        members:
+          type: array
+          description: Observed party members.
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/EncounterMember'
+        location:
+          type: string
+          description: Free-text location label.
+          example: Mistwood
+    RouteEncounterRequest:
+      type: object
+      description: Record a route sweep.
+      required: [routeId, count, location]
+      properties:
+        routeId:
+          type: string
+          description: Route identifier.
+          example: rte_west_meadow
+        count:
+          type: integer
+          minimum: 1
+          maximum: 50
+          description: Number of encounters to record.
+          example: 5
+        location:
+          type: string
+          description: Free-text location label.
+          example: Sunlit Meadow
+    AcceptedOrder:
+      type: object
+      description: Order accepted for asynchronous processing.
+      required: [orderId, status]
+      properties:
+        orderId:
+          type: string
+          description: Order identifier used for polling.
+          example: ord_demo_0001
+        status:
+          $ref: '#/components/schemas/EncounterStatus'
+        estimatedAt:
+          type: string
+          format: date-time
+          description: Estimated completion timestamp.
+          example: '2026-04-01T10:00:05Z'
+    EncounterOrder:
+      type: object
+      description: Current state of an encounter order.
+      required: [orderId, status, submittedAt]
+      properties:
+        orderId:
+          type: string
+          description: Order identifier.
+          example: ord_demo_0001
+        status:
+          $ref: '#/components/schemas/EncounterStatus'
+        submittedAt:
+          type: string
+          format: date-time
+          description: Submission timestamp.
+          example: '2026-04-01T10:00:00Z'
+        result:
+          type: object
+          description: Optional result payload once processing completes.
+          properties:
+            encountered:
+              type: integer
+              description: Number of encounters recorded.
+              example: 3
+    EncounterOrderResponse:
+      type: object
+      description: Response wrapper for an encounter order.
+      properties:
+        orderId:
+          type: string
+          description: Order identifier.
+          example: ord_demo_0001
+        status:
+          $ref: '#/components/schemas/EncounterStatus'
+        submittedAt:
+          type: string
+          format: date-time
+          description: Submission timestamp.
+          example: '2026-04-01T10:00:00Z'
+        result:
+          type: object
+          description: Optional result payload.
+          properties:
+            encountered:
+              type: integer
+              description: Number of encounters recorded.
+              example: 3
+    Habitat:
+      type: object
+      description: A habitat, possibly containing nested sub-habitats.
+      required: [habitatId, name, climate]
+      properties:
+        habitatId:
+          type: string
+          description: Stable habitat identifier.
+          example: hab_meadow
+        name:
+          type: string
+          description: Habitat name.
+          example: Sunlit Meadow
+        climate:
+          $ref: '#/components/schemas/HabitatClimate'
+        children:
+          type: array
+          description: Nested sub-habitats.
+          items:
+            $ref: '#/components/schemas/Habitat'
+    HabitatListResponse:
+      type: object
+      description: Habitats belonging to a region.
+      properties:
+        regionId:
+          type: string
+          description: Region identifier.
+          example: reg_lumen
+        items:
+          type: array
+          description: Habitats in the region.
+          items:
+            $ref: '#/components/schemas/Habitat'
+    Region:
+      type: object
+      description: A PocketDex region.
+      required: [regionId, name, generation]
+      properties:
+        regionId:
+          type: string
+          description: Stable region identifier.
+          example: reg_lumen
+        name:
+          type: string
+          description: Public region name.
+          example: Lumen Vale
+        generation:
+          $ref: '#/components/schemas/RegionGeneration'
+        habitats:
+          type: array
+          description: Habitats in the region.
+          items:
+            $ref: '#/components/schemas/Habitat'
+    Item:
+      type: object
+      description: An item in the catalogue.
+      required: [itemId, name, category, cost]
+      properties:
+        itemId:
+          type: string
+          description: Stable item identifier.
+          example: itm_glow_salve
+        name:
+          type: string
+          description: Item name.
+          example: Glow Salve
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        cost:
+          type: integer
+          minimum: 0
+          description: Cost in Pocket Coins.
+          example: 320
+        description:
+          type: string
+          description: Item description.
+          example: Restores a small amount of health.
+    ItemPage:
+      type: object
+      description: Paginated item list.
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          description: Items on this page.
+          items:
+            $ref: '#/components/schemas/Item'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    BreedingPair:
+      type: object
+      description: A compatible breeding pair.
+      required: [speciesA, speciesB]
+      properties:
+        speciesA:
+          type: string
+          description: First species identifier.
+          example: spc_emberling
+        speciesB:
+          type: string
+          description: Second species identifier.
+          example: spc_aquafin
+        compatibility:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Compatibility score.
+          example: 0.72
+    BreedingPairList:
+      type: object
+      description: List of breeding pairs.
+      properties:
+        items:
+          type: array
+          description: Matching pairs.
+          items:
+            $ref: '#/components/schemas/BreedingPair'
