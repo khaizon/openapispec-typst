@@ -6,7 +6,7 @@ This repository is a **privacy-safe reference project** for the converter. The
 bundled specification is a fictional **PocketDex API** — no production,
 customer or third-party API data is included.
 
-[PDF](dist/pocketdex.pdf) · [landing page](dist/index.html) · [spec](specs/pocketdex.yaml)
+[PDF](dist/pocketdex.pdf) · [live demo](https://console.maomaothinks.com/test-pdf/) · [landing page](dist/index.html) · [spec](specs/pocketdex.yaml)
 
 <a href="docs/preview-cover.png"><img src="docs/preview-cover.png" width="49%" alt="Cover page"></a>
 <a href="docs/preview-endpoint.png"><img src="docs/preview-endpoint.png" width="49%" alt="Endpoint page"></a>
@@ -124,6 +124,12 @@ npm run check
 
 The suite covers model invariants, mode density, CLI failures, fixture
 compilation and the rendered PDF.
+
+## Hosted demo
+
+The current PocketDex reference is served at
+<https://console.maomaothinks.com/test-pdf/>; the direct PDF URL is
+<https://console.maomaothinks.com/test-pdf/pocketdex.pdf>.
 
 ## Notes
 
