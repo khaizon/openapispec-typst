@@ -74,12 +74,65 @@
 
 // --------------------------------------------------------------- helpers ---
 
+// Render a markdown (GFM) table in the document's own table design:
+// hairline row strokes, tapered columns (later columns get more room so
+// short identifier columns stay narrow) and the compact table text size.
+// Plain function, deliberately not a show rule: a show rule that returns
+// a new table would re-apply to its own output and recurse.
+#let md-table(..args) = {
+  let named = args.named()
+  let pos = args.pos()
+  let n = named.at("columns", default: 1)
+  let cols = if type(n) == int and n >= 2 {
+    range(n).map(i => (1 + 0.5 * i) * 1fr)
+  } else if type(n) == int {
+    (1fr,)
+  } else {
+    n
+  }
+  let body = table(
+    columns: cols,
+    align: named.at("align", default: auto),
+    stroke: (x: none, y: 0.4pt + border),
+    inset: (x: 6pt, y: 4.5pt),
+    ..pos.map(child => {
+      if type(child) == content and child.func() == table.header {
+        table.header(
+          repeat: true,
+          ..child.children.map(cell =>
+            text(size: 7.2pt, weight: 700, tracking: 0.5pt, fill: muted, cell)
+          ),
+        )
+      } else {
+        child
+      }
+    }),
+  )
+  // Small tables move whole, so the Typst 0.15.1 region bug cannot
+  // fragment them mid-table (same rationale as schema-props-table).
+  if pos.len() <= 9 * n {
+    block(breakable: false, above: 0.5em, below: 0.5em, body)
+  } else {
+    block(above: 0.5em, below: 0.5em, body)
+  }
+}
+
 #let md(source) = {
   if source == none or source == "" { return none }
   set par(spacing: 0.7em)
   show list: set block(above: 0.3em, below: 0.3em)
   show enum: set block(above: 0.3em, below: 0.3em)
-  cmark(source, h1-level: 6)
+  // cmarker emits plain table() calls; re-route them through md-table by
+  // evaluating the generated source with a scope-local binding. The scope
+  // mirrors cmarker's own eval bindings: it must supply rule (used for
+  // markdown horizontal rules) alongside the table hook.
+  let code = cmark(source, h1-level: 6, show-source: true).text
+  code = code.replace("#table(", "#md-table(")
+  eval(
+    code,
+    mode: "markup",
+    scope: (rule: line.with(length: 100%), "md-table": md-table),
+  )
 }
 
 #let md-inline(source) = {
@@ -922,7 +975,57 @@
 }
 
 
-#let code-block(source) = raw(source, lang: "json", block: true)
+// Insert zero-width break opportunities inside runs of characters that carry
+// no spaces, so very long tokens (base64 payloads, JWTs, packed JSON arrays)
+// wrap inside the example block instead of running past the page edge.
+#let break-long-runs(value, limit: 70, step: 35) = {
+  let out = ()
+  let run = 0
+  for ch in value.clusters() {
+    if ch == " " or ch == "
+" or ch == "	" or ch == "
+" {
+      run = 0
+      out.push(ch)
+    } else {
+      run += 1
+      if run >= limit {
+        out.push("​")
+        run = 0
+      }
+      out.push(ch)
+    }
+  }
+  out.join()
+}
+
+// Zero-width break opportunities after separators and camelCase humps, so
+// long identifiers such as kpi_peak_overall_subscriber_application_throughput
+// or timeseriesAppAppCategoryRoaming can wrap inside narrow table columns
+// instead of overflowing into neighbouring cells.
+#let breakable-ident(value) = {
+  if type(value) != str { return value }
+  let zwsp = "​"
+  let out = ()
+  let prev = ""
+  for ch in value.clusters() {
+    let lower-prev = prev.len() == 1 and "a" <= prev and prev <= "z"
+    let upper-ch = ch.len() == 1 and "A" <= ch and ch <= "Z"
+    if prev != "" and lower-prev and upper-ch {
+      out.push(zwsp)
+    }
+    if ch == "_" or ch == "." or ch == "-" or ch == ">" or ch == "/" {
+      out.push(ch)
+      out.push(zwsp)
+    } else {
+      out.push(ch)
+    }
+    prev = ch
+  }
+  out.join()
+}
+
+#let code-block(source) = raw(break-long-runs(source), lang: "json", block: true)
 
 
 
@@ -933,7 +1036,7 @@
       font: mono-font,
       size: 7.4pt,
       fill: accent,
-      "↗ " + node.ref,
+      "↗ " + breakable-ident(node.ref),
     ))
   } else if node.kind == "array" {
     text(font: mono-font, size: 7.4pt, fill: ink, "array<")
@@ -961,7 +1064,7 @@
     text(size: 6.7pt, fill: muted, "enum: ")
     for (index, value) in node.enum-values.enumerate() {
       if index > 0 { text(size: 6.7pt, fill: faint, " | ") }
-      text(font: mono-font, size: 6.7pt, fill: muted, value)
+      text(font: mono-font, size: 6.7pt, fill: muted, breakable-ident(value))
     }
   }
   let extras = ()
@@ -980,7 +1083,7 @@
   let cells = ()
   for field in fields {
     cells.push(block({
-      text(font: mono-font, size: 7.6pt, weight: 600, field.name)
+      text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(field.name))
       if field.deprecated {
         h(4pt)
         deprecated-badge
@@ -1009,7 +1112,7 @@
           )
       ) {
         text(size: 6.7pt, fill: muted, "  ·  Example: ")
-        text(font: mono-font, size: 6.7pt, fill: muted, field.example-short)
+        text(font: mono-font, size: 6.7pt, fill: muted, break-long-runs(field.example-short, limit: 30))
       }
     }))
   }
@@ -1039,7 +1142,7 @@
       )
       if variant.name != variant.label {
         linebreak()
-        text(font: mono-font, size: 6.2pt, fill: faint, variant.name)
+        text(font: mono-font, size: 6.2pt, fill: faint, breakable-ident(variant.name))
       }
     }))
     cells.push(block(spacing: 1.5pt, {
@@ -1049,7 +1152,7 @@
       } else {
         for (index, field) in required.enumerate() {
           if index > 0 { text(fill: faint, " · ") }
-          text(font: mono-font, size: 7pt, fill: muted, field.name)
+          text(font: mono-font, size: 7pt, fill: muted, breakable-ident(field.name))
         }
       }
     }))
@@ -1149,11 +1252,11 @@
       ) {
         linebreak()
         text(size: 6.6pt, fill: muted, [Example: ])
-        text(font: mono-font, size: 6.6pt, fill: muted, property.example-short)
+        text(font: mono-font, size: 6.6pt, fill: muted, break-long-runs(property.example-short, limit: 30))
       }
     })
     cells.push([
-      #text(font: mono-font, size: 7.6pt, weight: 600, property.name)
+      #text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(property.name))
       #if property.deprecated {
         h(4pt)
         deprecated-badge
@@ -1168,21 +1271,42 @@
     cells.push(constraints-cell)
     cells.push(description-cell)
   }
-  table(
-    columns: (1.45fr, 1fr, 0.38fr, 1fr, 2.15fr),
-    stroke: (x: none, y: 0.4pt + border),
-    inset: (x: 6pt, y: 5pt),
-    align: (left, left, center, left, left),
-    table.header(
-      repeat: true,
-      table.cell(fill: surface)[#field-label("Field")],
-      table.cell(fill: surface)[#field-label("Type")],
-      table.cell(fill: surface, align: center)[#field-label("Req.")],
-      table.cell(fill: surface)[#field-label("Constraints")],
-      table.cell(fill: surface)[#field-label("Description")],
-    ),
-    ..cells,
-  )
+  // Typst 0.15.1 grid fragmentation bug: rows that must move to the next
+  // page are piled onto the region boundary (breakable cells) or silently
+  // dropped (unbreakable cells). Rendering the table in unbreakable chunks
+  // of 10 rows avoids row-level fragmentation entirely; each chunk is far
+  // shorter than a page, so it always moves as a whole.
+  let chunk-cells = 10 * 5
+  let parts = ()
+  let i = 0
+  while i < cells.len() {
+    let take = calc.min(chunk-cells, cells.len() - i)
+    let chunk-table = table(
+      columns: (1.45fr, 1fr, 0.38fr, 1fr, 2.15fr),
+      stroke: (x: none, y: 0.4pt + border),
+      inset: (x: 6pt, y: 5pt),
+      align: (left, left, center, left, left),
+      table.header(
+        repeat: true,
+        table.cell(fill: surface)[#field-label("Field")],
+        table.cell(fill: surface)[#field-label("Type")],
+        table.cell(fill: surface, align: center)[#field-label("Req.")],
+        table.cell(fill: surface)[#field-label("Constraints")],
+        table.cell(fill: surface)[#field-label("Description")],
+      ),
+      ..cells.slice(i, i + take),
+    )
+    parts.push(
+      block(
+        breakable: false,
+        above: if i == 0 { auto } else { 0pt },
+        below: 0pt,
+        chunk-table,
+      ),
+    )
+    i += take
+  }
+  parts.join()
 }
 
 #let schema-body(node, depth: 0, schema-name: "") = {
@@ -1214,12 +1338,16 @@
             inset: (left: 11pt, top: 7pt, bottom: 2pt),
             above: 8pt,
             {
+              // JetBrains Mono has no glyph for ↳; the arrow comes from
+              // the body font, the identifier stays monospaced.
+              text(font: body-font, size: 7.8pt, weight: 600, fill: muted)[↳ ]
+              h(1pt)
               text(
                 font: mono-font,
                 size: 7.8pt,
                 weight: 600,
                 fill: muted,
-                [↳ ] + property.name,
+                breakable-ident(property.name),
               )
               h(6pt)
               text(size: 6.6pt, fill: faint, if property.node.kind == "array" {
@@ -1306,7 +1434,12 @@
     schema-body(schema.node, schema-name: schema.name)
     v(if compact { 8pt } else { 16pt }, weak: true)
   }
-  if compact or schema.property-count <= 6 {
+  // Keep only genuinely small cards unbreakable. A breakable: false card
+  // that is taller than a page forces typst 0.15.1 into broken region
+  // layout (rows past the page bottom, trailing rows lost), so compact
+  // helper cards with many properties must stay breakable; the property
+  // table itself is chunked into unbreakable page-sized pieces.
+  if schema.property-count <= 6 {
     block(width: 100%, breakable: false, body)
   } else {
     body
@@ -1336,7 +1469,7 @@
     if description != none and description != [] { description }
     let cells = ()
     for property in schema.node.properties {
-      cells.push(text(font: mono-font, size: 7.4pt, weight: 600, property.name))
+      cells.push(text(font: mono-font, size: 7.4pt, weight: 600, breakable-ident(property.name)))
       cells.push(schema-type(property.node))
       cells.push(if property.required {
         text(size: 7pt, weight: 600, fill: rgb("#067647"), "Yes")
@@ -1468,7 +1601,10 @@
       v(3pt)
       code-block(example.value-json)
     }
-    if lines <= 16 {
+    // Up to ~48 rendered lines still fit an empty page with the title, so
+    // the whole example can move as one block; fragmenting raw blocks hit
+    // the typst 0.15.1 region bug at page boundaries.
+    if lines <= 48 {
       block(breakable: false, width: 100%, above: 7pt, below: 2pt, body)
     } else {
       block(width: 100%, above: 7pt, below: 2pt, body)
@@ -1518,7 +1654,7 @@
   let cells = ()
   for parameter in params {
     cells.push(block({
-      text(font: mono-font, size: 7.6pt, weight: 600, parameter.name)
+      text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(parameter.name))
       if parameter.deprecated {
         h(4pt)
         deprecated-badge
@@ -1555,7 +1691,7 @@
       description
       if parameter.example-short != none {
         text(size: 6.7pt, fill: muted, "  ·  Example: ")
-        text(font: mono-font, size: 6.7pt, fill: muted, parameter.example-short)
+        text(font: mono-font, size: 6.7pt, fill: muted, break-long-runs(parameter.example-short, limit: 30))
       }
     }))
   }
@@ -1596,59 +1732,61 @@
   if description != none and description != [] { description }
   for content in body.content {
     let model = content.request-model
-    block(breakable: false, {
-      block(width: 100%, above: 6pt, {
-        chip(
-          content.media-type,
-          fill: accent-soft,
-          stroke: rgb("#D7DEFA"),
-          ink-color: accent-ink,
+    // Only the media-type chip line stays unbreakable. Wrapping the
+    // field table in the same block reproduced the typst 0.15.1 region
+    // bug when the combined content was taller than the remaining page:
+    // rows were placed past the page bottom instead of moving.
+    block(breakable: false, width: 100%, above: 6pt, {
+      chip(
+        content.media-type,
+        fill: accent-soft,
+        stroke: rgb("#D7DEFA"),
+        ink-color: accent-ink,
+      )
+      h(8pt)
+      if model != none and model.kind == "one-of" {
+        text(size: 7.2pt, fill: muted, "Request variants: ")
+        text(
+          size: 7.2pt,
+          fill: ink,
+          str(model.variant-count) + " alternatives",
         )
-        h(8pt)
-        if model != none and model.kind == "one-of" {
-          text(size: 7.2pt, fill: muted, "Request variants: ")
-          text(
-            size: 7.2pt,
-            fill: ink,
-            str(model.variant-count) + " alternatives",
-          )
-        } else if model != none and model.name != "" {
-          text(size: 7.2pt, fill: muted, "Full model: ")
-          link(
-            label("schema-" + model.name),
-            text(font: mono-font, size: 7.4pt, fill: accent, model.name),
-          )
-        } else {
-          text(size: 7.2pt, fill: muted, "Schema: ")
-          schema-type(content.schema)
-        }
-      })
-      if model != none {
-        if model.kind == "one-of" {
-          v(2pt)
-          request-variants-table(model)
-          text(
-            size: 6.9pt,
-            fill: faint,
-            "Each variant is defined in full under Data Models; representative examples follow.",
-          )
-        } else if model.fields.len() > 0 {
-          v(3pt)
-          field-table(model.fields)
-          if model.truncated {
-            text(
-              size: 6.8pt,
-              fill: faint,
-              "Showing "
-                + str(model.fields.len())
-                + " of "
-                + str(model.field-count)
-                + " fields; the full model is in Data Models.",
-            )
-          }
-        }
+      } else if model != none and model.name != "" {
+        text(size: 7.2pt, fill: muted, "Full model: ")
+        link(
+          label("schema-" + model.name),
+          text(font: mono-font, size: 7.4pt, fill: accent, model.name),
+        )
+      } else {
+        text(size: 7.2pt, fill: muted, "Schema: ")
+        schema-type(content.schema)
       }
     })
+    if model != none {
+      if model.kind == "one-of" {
+        v(2pt)
+        request-variants-table(model)
+        text(
+          size: 6.9pt,
+          fill: faint,
+          "Each variant is defined in full under Data Models; representative examples follow.",
+        )
+      } else if model.fields.len() > 0 {
+        v(3pt)
+        field-table(model.fields)
+        if model.truncated {
+          text(
+            size: 6.8pt,
+            fill: faint,
+            "Showing "
+              + str(model.fields.len())
+              + " of "
+              + str(model.field-count)
+              + " fields; the full model is in Data Models.",
+          )
+        }
+      }
+    }
     if content.examples-show.len() > 0 {
       example-blocks(content.examples-show)
       if content.examples-total > content.examples-show.len() {
@@ -1802,7 +1940,7 @@
         text(size: 7.2pt, fill: muted, [Headers: ])
         for (index, header) in response.headers.enumerate() {
           if index > 0 { text(fill: faint, " · ") }
-          text(font: mono-font, size: 7.2pt, header.name)
+          text(font: mono-font, size: 7.2pt, breakable-ident(header.name))
         }
       })
     }
@@ -2491,7 +2629,13 @@
       "These response shapes are reused by multiple endpoints; endpoint sections link to the relevant entry here.",
     )
     for group in success {
-      block(breakable: false, {
+      // Groups with real example payloads can be taller than the remaining
+      // page; a tall breakable: false block is placed across the region
+      // boundary by typst 0.15.1 instead of moving, so keep only example
+      // free groups unbreakable.
+      let example-lines = group.examples.map(e => e.value-json.split("
+").len()).sum(default: 0)
+      let body = {
         [#heading(level: 3, outlined: false)[#group.label]#label(
             "response-group-" + group.id,
           )]
@@ -2519,7 +2663,12 @@
           schema-type(node)
         }
         if group.examples.len() > 0 { example-blocks(group.examples) }
-      })
+      }
+      if example-lines <= 8 {
+        block(breakable: false, body)
+      } else {
+        body
+      }
       v(12pt, weak: true)
     }
   }
@@ -2676,11 +2825,11 @@
   md("Allowed values for enumerated fields and request parameters.")
   let cells = ()
   for entry in spec.enum-reference {
-    cells.push(text(font: mono-font, size: 7.4pt, weight: 600, entry.name))
+    cells.push(text(font: mono-font, size: 7.4pt, weight: 600, breakable-ident(entry.name)))
     cells.push(block({
       for (index, value) in entry.values.enumerate() {
         if index > 0 { text(fill: faint, "  ·  ") }
-        text(font: mono-font, size: 7pt, value)
+        text(font: mono-font, size: 7pt, breakable-ident(value))
       }
     }))
     cells.push(block({
@@ -2939,7 +3088,9 @@
     },
   )
   set text(
-    font: (body-font, "Noto Sans"),
+    // Typst 0.15 falls back to other system fonts for any glyph Inter
+    // lacks, so no explicit fallback family is listed here.
+    font: (body-font,),
     size: 9.4pt,
     fill: ink,
     lang: "en",

@@ -1,6 +1,7 @@
 # openapispec-typst
 
-Turn an OpenAPI **3.1** document into a polished, navigable PDF with [Typst](https://typst.app).
+Turn OpenAPI **3.0/3.1** documents into polished, navigable PDFs with
+[Typst](https://typst.app).
 
 This repository is a **privacy-safe reference project** for the converter. The
 bundled specification is a fictional **PocketDex API** — no production,
@@ -34,6 +35,12 @@ customer or third-party API data is included.
 - **Mermaid diagrams in Markdown:** fenced `mermaid` code blocks in descriptions
   are rendered as SVG through [`@preview/merman:0.5.0`](https://typst.app/universe/package/merman/);
   other code fences stay as code.
+- **GFM tables in Markdown:** pipe tables in descriptions render in the
+  document's own table design (hairline row strokes, tapered columns, bold
+  small header), and small tables move to the next page whole.
+- Example payloads are pretty-printed and capped at 46 lines with an explicit
+  truncation marker, so a rendered example always fits one page; the full
+  payload stays in the source document.
 - Enumerations index and Specification Notes for source observations.
 - Three document densities: `concise`, `reference` (default) and `exhaustive`.
 - TypeScript pipeline, npm scripts, atomic build output and fixture tests.
@@ -171,8 +178,8 @@ SPEC=specs/my-api.yaml NAME=my-api SPEC_ID=my-api npm run build
 ```
 
 The build writes `dist/my-api.pdf` and a landing page pointing at it. The
-converter accepts local OpenAPI 3.1 YAML/JSON and resolves local `$ref`s only;
-external references are rejected with a clear error.
+converter accepts local OpenAPI 3.0/3.1 YAML/JSON and resolves local `$ref`s
+only; external references are rejected with a clear error.
 
 ## Architecture
 
@@ -180,7 +187,7 @@ external references are rejected with a clear error.
 spec YAML/JSON
       |
       v
-src/spec.ts       load + validate 3.1 + resolve $refs
+src/spec.ts       load + validate 3.0/3.1 + resolve $refs
 src/model.ts      normalise, deduplicate, classify, apply mode
 src/typst.ts      encode build/generated/data.typ
 src/build.ts      typst.compile() -> atomic dist/ publish
@@ -236,3 +243,30 @@ The current PocketDex reference is served at
   Typst 0.15+, which the project already uses.
 - `npm run check` compiles a fixture containing a Mermaid fence, so diagram
   support is covered by the test suite.
+- Static Inter, Montserrat and JetBrains Mono TTFs live in `fonts/` (with their
+  SIL Open Font License files); when present, the build passes them via
+  `--font-path` so the PDFs embed exactly these faces.
+- Long identifiers get zero-width break opportunities after separators and
+  camelCase humps, and long unbroken runs inside JSON every 70 characters
+  (30 for inline `Example:` snippets), so nothing overflows its column.
+
+## Typst 0.15.1 layout workarounds
+
+Typst 0.15.1 (the newest release) has a region-exhaustion bug
+([typst/typst#8790](https://github.com/typst/typst/issues/8790)): when a
+child cannot fit the remaining page region, later children are stacked at or
+past the region boundary instead of advancing — long tables pile rows on top
+of each other and long examples overlap the footer. The template works around
+it structurally:
+
+- Property tables render as unbreakable 10-row chunks (`schema-props-table`),
+  so a row never needs to move mid-table.
+- Cards, request bodies and success-envelope groups are only unbreakable when
+  they are provably small; anything that can be taller than the remaining
+  page stays breakable.
+- Example payloads are capped by the converter (46 lines, explicit truncation
+  marker) so an example block always fits one page and moves whole.
+- Markdown tables with up to 9 rows are wrapped unbreakable for the same
+  reason.
+
+When a fixed Typst release ships, these guards can be simplified.

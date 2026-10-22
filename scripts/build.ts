@@ -21,6 +21,8 @@ const result = await buildDocument({
   overrides: arg("--overrides", process.env.OVERRIDES),
   specId: arg("--spec-id", process.env.SPEC_ID),
   hideEnhancements: hasFlag("--hide-enhancements") || truthy(process.env.HIDE_ENHANCEMENTS),
+  outDir: arg("--out-dir", process.env.OUT_DIR),
+  index: process.env.INDEX !== "0" && !process.argv.includes("--no-index"),
 });
 console.log(
   "spec: " + result.spec.title + " v" + result.spec.version

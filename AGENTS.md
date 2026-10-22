@@ -4,10 +4,10 @@ Guidance for agents and humans working in this repository.
 
 ## Purpose
 
-Turn OpenAPI **3.1** documents into a professional, human-readable PDF API
-reference using Typst. The checked-in example is the fictional **PocketDex**
-API in `specs/pocketdex.yaml`; it exists to demonstrate the converter without
-publishing any real API, customer or production data.
+Turn OpenAPI **3.0.x and 3.1** documents into a professional, human-readable
+PDF API reference using Typst. The checked-in example is the fictional
+**PocketDex** API in `specs/pocketdex.yaml`; it exists to demonstrate the
+converter without publishing any real API, customer or production data.
 
 The project is also the privacy-safe public home of the TypeScript converter
 that was originally extracted from a private OpenAPI documentation pipeline.
@@ -64,7 +64,7 @@ Keep it generic.
 spec YAML/JSON
       |
       v
-src/spec.ts       load + validate 3.1 + resolve $refs
+src/spec.ts       load + validate 3.0/3.1 + resolve $refs
       |
       v
 src/model.ts      normalise into plain JS data
@@ -92,9 +92,11 @@ build/generated/data.typ ---> templates/main.typ
   quoted.
 - `src/cli.ts`: `--check`, `--out-dir`, `--json`, `--index-template`,
   `--index-out`, `--pdf-name`, `--date`, `--mode`.
-- `src/build.ts`: writes generated data, the generated enhancement bundle
-  and the landing page, calls `typst.compile(input, output, { root })`, then
-  atomically publishes.
+- `src/build.ts`: writes generated data, the enhancement bundle and the
+  landing page, calls `typst.compile(input, output, { root })`, then atomically
+  publishes. Accepts `outDir`, `index` and `fontPath` options; when a `fonts/`
+  directory exists it is passed with `--font-path` so PDFs embed exactly those
+  faces.
 - `src/enhancements.ts`: discovers self-declaring Typst enhancement modules,
   resolves the spec identity, and writes
   `build/generated/enhancements.typ`.
@@ -102,6 +104,8 @@ build/generated/data.typ ---> templates/main.typ
   postinstall replaces its binary with the official 0.15.1 CLI from
   `@flukxr/typst-cli`. Keep the typed `typst.compile()` usage; replace this shim
   when the npm package ships a current compiler.
+- `fonts/`: static Inter, Montserrat and JetBrains Mono TTFs with their SIL
+  Open Font License files; used automatically by the build when present.
 
 ### Data contract
 
@@ -124,6 +128,10 @@ spec-id`. `spec-id` is added by the build from `x-spec-id` (or `--spec-id`).
   example-short`. Sorted path → query → header → cookie, then name.
 - `request-body`: `required, description, content[]`; each entry has
   `media-type, schema, examples, examples-show, examples-total`.
+- `examples[]` entries carry `value-json` (pretty-printed, capped at
+  `EXAMPLE_MAX_LINES` = 46 lines with an explicit truncation marker so each
+  rendered example fits one page), `value-short` (truncated inline form) and
+  a `name`/`summary` pair.
 - `responses[]`: `status, status-class, description, short-description,
   shared, content[], headers[]`.
 - `shared-response-refs[]`: unique shared groups with `status, status-class,
@@ -242,10 +250,29 @@ make build MODE=concise
 - Hyphenated identifiers are valid (`spec.operations.at(0).request-body`).
 - Front matter uses `page(header: none, footer: none, numbering: none)`;
   the page counter resets with `counter(page).update(1)` after the TOC.
-- Tables set `hyphenate: false`; long paths use zero-width breaks after `/`.
+- Tables set `hyphenate: false`; long paths use zero-width breaks after `/`,
+  long identifiers after separators and camelCase humps
+  (`breakable-ident`), and long unbroken runs inside JSON every 70
+  characters (30 for inline `Example:` snippets) via `break-long-runs`.
+- Markdown (GFM) pipe tables in descriptions are re-routed through
+  `md-table` by evaluating cmarker's generated source with a scope-local
+  binding; that scope must keep supplying `rule` (used for markdown
+  horizontal rules). A show rule returning a new table would re-apply to its
+  own output and recurse, which is why the re-route exists.
 - Page-break heuristics: endpoint heading/signature/purpose/auth are one
   unbreakable block; small parameter/response tables stay together; short JSON
   examples and the first Notes paragraph are unbreakable.
+- **Typst 0.15.1 region bug** ([typst/typst#8790](https://github.com/typst/typst/issues/8790)):
+  when a child cannot fit the remaining page region, later children are
+  stacked at or past the region boundary instead of advancing — table rows
+  pile onto each other, rows get dropped and long examples overlap the
+  footer. Structural workarounds in `templates/lib.typ` and `src/model.ts`:
+  property tables render as unbreakable 10-row chunks (`schema-props-table`);
+  cards, request bodies and success-envelope groups are only unbreakable when
+  provably small; example payloads are capped at `EXAMPLE_MAX_LINES` (46)
+  lines by the converter so each example fits one page and moves whole;
+  markdown tables up to 9 rows are wrapped unbreakable.
+  Simplify these guards once Typst ships a fix.
 - `running-endpoint` state drives the "<endpoint> · continued" header on
   continuation pages and resets at the end of each endpoint.
 - Data Models cards render by `role`; `--mode exhaustive` renders full cards.
