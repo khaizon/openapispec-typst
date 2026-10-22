@@ -99,9 +99,13 @@
       if type(child) == content and child.func() == table.header {
         table.header(
           repeat: true,
-          ..child.children.map(cell =>
-            text(size: 7.2pt, weight: 700, tracking: 0.5pt, fill: muted, cell)
-          ),
+          ..child.children.map(cell => text(
+            size: 7.2pt,
+            weight: 700,
+            tracking: 0.5pt,
+            fill: muted,
+            cell,
+          )),
         )
       } else {
         child
@@ -1000,8 +1004,8 @@
 }
 
 // Zero-width break opportunities after separators and camelCase humps, so
-// long identifiers such as kpi_peak_overall_subscriber_application_throughput
-// or timeseriesAppAppCategoryRoaming can wrap inside narrow table columns
+// long identifiers such as trainer_party_overall_encounter_throughput
+// or speciesObservationRegionSummary can wrap inside narrow table columns
 // instead of overflowing into neighbouring cells.
 #let breakable-ident(value) = {
   if type(value) != str { return value }
@@ -1025,7 +1029,11 @@
   out.join()
 }
 
-#let code-block(source) = raw(break-long-runs(source), lang: "json", block: true)
+#let code-block(source) = raw(
+  break-long-runs(source),
+  lang: "json",
+  block: true,
+)
 
 
 
@@ -1083,7 +1091,9 @@
   let cells = ()
   for field in fields {
     cells.push(block({
-      text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(field.name))
+      text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(
+        field.name,
+      ))
       if field.deprecated {
         h(4pt)
         deprecated-badge
@@ -1112,7 +1122,10 @@
           )
       ) {
         text(size: 6.7pt, fill: muted, "  ·  Example: ")
-        text(font: mono-font, size: 6.7pt, fill: muted, break-long-runs(field.example-short, limit: 30))
+        text(font: mono-font, size: 6.7pt, fill: muted, break-long-runs(
+          field.example-short,
+          limit: 30,
+        ))
       }
     }))
   }
@@ -1142,7 +1155,9 @@
       )
       if variant.name != variant.label {
         linebreak()
-        text(font: mono-font, size: 6.2pt, fill: faint, breakable-ident(variant.name))
+        text(font: mono-font, size: 6.2pt, fill: faint, breakable-ident(
+          variant.name,
+        ))
       }
     }))
     cells.push(block(spacing: 1.5pt, {
@@ -1152,7 +1167,9 @@
       } else {
         for (index, field) in required.enumerate() {
           if index > 0 { text(fill: faint, " · ") }
-          text(font: mono-font, size: 7pt, fill: muted, breakable-ident(field.name))
+          text(font: mono-font, size: 7pt, fill: muted, breakable-ident(
+            field.name,
+          ))
         }
       }
     }))
@@ -1252,11 +1269,16 @@
       ) {
         linebreak()
         text(size: 6.6pt, fill: muted, [Example: ])
-        text(font: mono-font, size: 6.6pt, fill: muted, break-long-runs(property.example-short, limit: 30))
+        text(font: mono-font, size: 6.6pt, fill: muted, break-long-runs(
+          property.example-short,
+          limit: 30,
+        ))
       }
     })
     cells.push([
-      #text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(property.name))
+      #text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(
+        property.name,
+      ))
       #if property.deprecated {
         h(4pt)
         deprecated-badge
@@ -1469,7 +1491,12 @@
     if description != none and description != [] { description }
     let cells = ()
     for property in schema.node.properties {
-      cells.push(text(font: mono-font, size: 7.4pt, weight: 600, breakable-ident(property.name)))
+      cells.push(text(
+        font: mono-font,
+        size: 7.4pt,
+        weight: 600,
+        breakable-ident(property.name),
+      ))
       cells.push(schema-type(property.node))
       cells.push(if property.required {
         text(size: 7pt, weight: 600, fill: rgb("#067647"), "Yes")
@@ -1654,7 +1681,9 @@
   let cells = ()
   for parameter in params {
     cells.push(block({
-      text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(parameter.name))
+      text(font: mono-font, size: 7.6pt, weight: 600, breakable-ident(
+        parameter.name,
+      ))
       if parameter.deprecated {
         h(4pt)
         deprecated-badge
@@ -1691,7 +1720,10 @@
       description
       if parameter.example-short != none {
         text(size: 6.7pt, fill: muted, "  ·  Example: ")
-        text(font: mono-font, size: 6.7pt, fill: muted, break-long-runs(parameter.example-short, limit: 30))
+        text(font: mono-font, size: 6.7pt, fill: muted, break-long-runs(
+          parameter.example-short,
+          limit: 30,
+        ))
       }
     }))
   }
@@ -2633,8 +2665,11 @@
       // page; a tall breakable: false block is placed across the region
       // boundary by typst 0.15.1 instead of moving, so keep only example
       // free groups unbreakable.
-      let example-lines = group.examples.map(e => e.value-json.split("
-").len()).sum(default: 0)
+      let example-lines = group
+        .examples
+        .map(e => e.value-json.split("
+").len())
+        .sum(default: 0)
       let body = {
         [#heading(level: 3, outlined: false)[#group.label]#label(
             "response-group-" + group.id,
@@ -2825,7 +2860,9 @@
   md("Allowed values for enumerated fields and request parameters.")
   let cells = ()
   for entry in spec.enum-reference {
-    cells.push(text(font: mono-font, size: 7.4pt, weight: 600, breakable-ident(entry.name)))
+    cells.push(text(font: mono-font, size: 7.4pt, weight: 600, breakable-ident(
+      entry.name,
+    )))
     cells.push(block({
       for (index, value) in entry.values.enumerate() {
         if index > 0 { text(fill: faint, "  ·  ") }
