@@ -71,10 +71,103 @@ make build MODE=concise
 | `reference` | balanced examples, classified models, inline request fields |
 | `exhaustive` | all examples and full model tables |
 
+## PDF enhancements
+
+The OpenAPI file remains the only source of API contract. A Typst enhancement
+module can replace or extend prose at specific documentation slots without
+changing paths, methods, schemas, examples or auth.
+
+Modules live in `overrides/` by default. Every module declares its format
+version, applicable spec IDs and optional priority:
+
+```typst
+#let meta = (
+  version: 1,
+  specs: ("pocketdex", "pocketdex-v2"),
+  priority: 0,
+)
+
+#let overrides = (
+  overview: (
+    description: (append: [ ... ]),
+  ),
+  tags: (
+    "Trainers": (
+      description: (append: [ ... ]),
+    ),
+  ),
+  operations: (
+    recordEncounter: (
+      purpose: [ ... ],           // replace
+      notes: (append: [ ... ]),  // keep the source, then add
+      requestBody: (prepend: [ ... ]),
+      parameters: (
+        query: (
+          pageNo: (append: [ ... ]),
+        ),
+      ),
+    ),
+  ),
+  schemas: (
+    SpeciesDetail: (
+      description: (append: [ ... ]),
+      fields: (
+        habitat: (append: [ ... ]),
+      ),
+    ),
+  ),
+)
+```
+
+Slots:
+
+| Target | Allowed slots |
+| --- | --- |
+| `overview` | `description` |
+| `tags.<name>` | `description` |
+| `operations.<operationId>` | `purpose`, `notes`, `requestBody`, `parameters.<location>.<name>` |
+| `schemas.<name>` | `description`, `fields.<property>` |
+
+A plain Typst content block replaces the source prose. A dictionary with
+`prepend` and/or `append` adds content while keeping the source. Empty
+replacement (`[]`) removes the prose and suppresses the empty surrounding block.
+
+### Applicability, priority and validation
+
+- Spec identity comes from root-level `x-spec-id`, or `--spec-id`/`SPEC_ID`.
+- `specs` is required and exact. If overrides exist and no identity resolves, the
+  build fails.
+- All targets must exist in every listed spec.
+- Higher module priority wins conflicts; equal highest priority fails.
+- All applicable modules are validated, including shadowed ones.
+- Discovery: recursive `overrides/**/*.typ`; files beginning with `_` are helpers.
+- `--overrides <file|dir>` replaces default discovery and must stay inside the
+  project root.
+- Errors are aggregated with module path, target path, slot and conflict details.
+
+### Showing or hiding markers
+
+By default the PDF shows a **PDF enhancement** chip on affected sections and a
+final **PDF Enhancements** appendix listing module, priority and target.
+
+```bash
+npm run build -- --hide-enhancements
+HIDE_ENHANCEMENTS=1 npm run build
+```
+
+The content is still applied and validated; only the chips and appendix are
+hidden.
+
+<a href="docs/preview-enhancement.png"><img src="docs/preview-enhancement.png" width="100%" alt="PDF enhancement chip and authored overview prose"></a>
+
+`overrides/pocketdex.typ` is a working sample. Add Markdown fences for Mermaid
+diagrams as usual; arbitrary Typst content is allowed, but field and parameter
+slots render inside table cells, so keep those inline.
+
 ## Use another spec
 
 ```bash
-SPEC=specs/my-api.yaml NAME=my-api npm run build
+SPEC=specs/my-api.yaml NAME=my-api SPEC_ID=my-api npm run build
 ```
 
 The build writes `dist/my-api.pdf` and a landing page pointing at it. The
@@ -101,6 +194,8 @@ src/build.ts      typst.compile() -> atomic dist/ publish
 | `src/typst.ts` | Typst literal encoder |
 | `src/cli.ts` | Converter CLI |
 | `src/build.ts` | PDF build and atomic publish |
+| `src/enhancements.ts` | Enhancement discovery and generated Typst bundle |
+| `overrides/` | Typst prose enhancements (one or more self-declaring modules) |
 | `templates/lib.typ` | Layout, theme and PDF components |
 | `templates/main.typ` | Document entry point |
 | `templates/index.html` | Landing page template |

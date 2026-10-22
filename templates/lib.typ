@@ -184,6 +184,744 @@
   text-body,
 )
 
+#let enhancement-state = state("enhancement-state", (
+  targets: (:),
+  visible: (:),
+  show-markers: true,
+))
+
+#let enhancement-type-name(value) = {
+  let name = str(type(value))
+  if name == "content" { "content block" } else if name == "dictionary" {
+    "dictionary"
+  } else if name == "array" { "array" } else if name == "string" {
+    "string"
+  } else if name == "integer" { "integer" } else { name }
+}
+
+#let enhancement-record(value, module, priority, target, errors) = {
+  if type(value) == content {
+    return (
+      record: (
+        replace: value,
+        prepend: [],
+        append: [],
+        mode: "replace",
+        visible: value != [],
+      ),
+      errors: errors,
+    )
+  }
+  if type(value) != dictionary {
+    errors.push(
+      "PDF enhancement error in "
+        + module
+        + "\n"
+        + "  "
+        + target
+        + " must be a Typst content block or a (prepend:, append:) dictionary; got "
+        + enhancement-type-name(value)
+        + ".",
+    )
+    return (record: none, errors: errors)
+  }
+
+  let prepend = value.at("prepend", default: [])
+  let append = value.at("append", default: [])
+  for key in value.keys() {
+    if key not in ("prepend", "append") {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  "
+          + target
+          + " has unknown mode key "
+          + repr(key)
+          + ". "
+          + "Allowed keys: prepend, append.",
+      )
+    }
+  }
+  if type(prepend) != content {
+    errors.push(
+      "PDF enhancement error in "
+        + module
+        + "\n"
+        + "  "
+        + target
+        + ".prepend must be a Typst content block; got "
+        + enhancement-type-name(prepend)
+        + ".",
+    )
+    prepend = []
+  }
+  if type(append) != content {
+    errors.push(
+      "PDF enhancement error in "
+        + module
+        + "\n"
+        + "  "
+        + target
+        + ".append must be a Typst content block; got "
+        + enhancement-type-name(append)
+        + ".",
+    )
+    append = []
+  }
+  let mode = if prepend != [] and append != [] { "prepend+append" } else if (
+    prepend != []
+  ) { "prepend" } else if append != [] { "append" } else { "no-op" }
+  (
+    record: (
+      replace: none,
+      prepend: prepend,
+      append: append,
+      mode: mode,
+      visible: prepend != [] or append != [],
+    ),
+    errors: errors,
+  )
+}
+
+#let enhancement-register(targets, target, value, module, priority, errors) = {
+  let result = enhancement-record(value, module, priority, target, errors)
+  let errors = result.errors
+  if result.record == none { return (targets: targets, errors: errors) }
+  let record = result.record
+  record.insert("target", target)
+  record.insert("path", module)
+  record.insert("priority", priority)
+  if target not in targets {
+    targets.insert(target, record)
+    return (targets: targets, errors: errors)
+  }
+  let existing = targets.at(target)
+  if priority > existing.priority {
+    targets.insert(target, record)
+  } else if priority == existing.priority {
+    errors.push(
+      "PDF enhancement conflict at "
+        + target
+        + "\n"
+        + "  "
+        + existing.path
+        + "  priority "
+        + str(existing.priority)
+        + "\n"
+        + "  "
+        + module
+        + "  priority "
+        + str(priority)
+        + "\n"
+        + "  Set distinct priorities or remove one enhancement.",
+    )
+  }
+  (targets: targets, errors: errors)
+}
+
+#let enhancement-validate-overview(
+  overrides,
+  module,
+  priority,
+  targets,
+  errors,
+) = {
+  for key in overrides.keys() {
+    if key != "description" {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  overview has unknown slot "
+          + repr(key)
+          + ". Allowed: description.",
+      )
+      continue
+    }
+    let result = enhancement-register(
+      targets,
+      "overview.description",
+      overrides.at("description"),
+      module,
+      priority,
+      errors,
+    )
+    targets = result.targets
+    errors = result.errors
+  }
+  (targets: targets, errors: errors)
+}
+
+#let enhancement-validate-tags(
+  spec,
+  overrides,
+  module,
+  priority,
+  targets,
+  errors,
+) = {
+  for (name, slots) in overrides {
+    let tag = spec.tags.find(item => item.name == name)
+    if tag == none {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  Unknown tag "
+          + repr(name)
+          + ".",
+      )
+      continue
+    }
+    if type(slots) != dictionary {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  tags."
+          + name
+          + " must be a dictionary with a description slot.",
+      )
+      continue
+    }
+    for key in slots.keys() {
+      if key != "description" {
+        errors.push(
+          "PDF enhancement error in "
+            + module
+            + "\n"
+            + "  tags."
+            + name
+            + " has unknown slot "
+            + repr(key)
+            + ". Allowed: description.",
+        )
+        continue
+      }
+      let result = enhancement-register(
+        targets,
+        "tags." + name + ".description",
+        slots.at("description"),
+        module,
+        priority,
+        errors,
+      )
+      targets = result.targets
+      errors = result.errors
+    }
+  }
+  (targets: targets, errors: errors)
+}
+
+#let enhancement-validate-operations(
+  spec,
+  overrides,
+  module,
+  priority,
+  targets,
+  errors,
+) = {
+  for (operation-id, slots) in overrides {
+    let operation = spec.operations.find(item => (
+      item.operation-id == operation-id
+    ))
+    if operation == none {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  Unknown operationId "
+          + repr(operation-id)
+          + ".",
+      )
+      continue
+    }
+    if type(slots) != dictionary {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  operations."
+          + operation-id
+          + " must be a dictionary.",
+      )
+      continue
+    }
+    for key in slots.keys() {
+      if key not in ("purpose", "notes", "requestBody", "parameters") {
+        errors.push(
+          "PDF enhancement error in "
+            + module
+            + "\n"
+            + "  operations."
+            + operation-id
+            + " has unknown slot "
+            + repr(key)
+            + ". Allowed: purpose, notes, requestBody, parameters.",
+        )
+        continue
+      }
+      if key == "parameters" {
+        let locations = slots.at("parameters")
+        if type(locations) != dictionary {
+          errors.push(
+            "PDF enhancement error in "
+              + module
+              + "\n"
+              + "  operations."
+              + operation-id
+              + ".parameters must be a dictionary.",
+          )
+          continue
+        }
+        for (location, names) in locations {
+          if location not in ("path", "query", "header", "cookie") {
+            errors.push(
+              "PDF enhancement error in "
+                + module
+                + "\n"
+                + "  operations."
+                + operation-id
+                + ".parameters has unknown location "
+                + repr(location)
+                + ". Allowed: path, query, header, cookie.",
+            )
+            continue
+          }
+          if type(names) != dictionary {
+            errors.push(
+              "PDF enhancement error in "
+                + module
+                + "\n"
+                + "  operations."
+                + operation-id
+                + ".parameters."
+                + location
+                + " must be a dictionary keyed by parameter name.",
+            )
+            continue
+          }
+          for (name, value) in names {
+            let parameter = operation.parameters.find(item => (
+              item.location == location and item.name == name
+            ))
+            if parameter == none {
+              errors.push(
+                "PDF enhancement error in "
+                  + module
+                  + "\n"
+                  + "  Unknown parameter "
+                  + location
+                  + "."
+                  + name
+                  + " on operation "
+                  + repr(operation-id)
+                  + ".",
+              )
+              continue
+            }
+            let result = enhancement-register(
+              targets,
+              "operations."
+                + operation-id
+                + ".parameters."
+                + location
+                + "."
+                + name,
+              value,
+              module,
+              priority,
+              errors,
+            )
+            targets = result.targets
+            errors = result.errors
+          }
+        }
+      } else if key == "requestBody" {
+        if operation.request-body == none {
+          errors.push(
+            "PDF enhancement error in "
+              + module
+              + "\n"
+              + "  Operation "
+              + repr(operation-id)
+              + " has no request body.",
+          )
+          continue
+        }
+        let result = enhancement-register(
+          targets,
+          "operations." + operation-id + ".requestBody",
+          slots.at("requestBody"),
+          module,
+          priority,
+          errors,
+        )
+        targets = result.targets
+        errors = result.errors
+      } else {
+        let result = enhancement-register(
+          targets,
+          "operations." + operation-id + "." + key,
+          slots.at(key),
+          module,
+          priority,
+          errors,
+        )
+        targets = result.targets
+        errors = result.errors
+      }
+    }
+  }
+  (targets: targets, errors: errors)
+}
+
+#let enhancement-validate-schemas(
+  spec,
+  overrides,
+  module,
+  priority,
+  targets,
+  errors,
+) = {
+  for (name, slots) in overrides {
+    let schema = spec.schemas.find(item => item.name == name)
+    if schema == none {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  Unknown schema "
+          + repr(name)
+          + ".",
+      )
+      continue
+    }
+    if type(slots) != dictionary {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  schemas."
+          + name
+          + " must be a dictionary.",
+      )
+      continue
+    }
+    for key in slots.keys() {
+      if key == "description" {
+        let result = enhancement-register(
+          targets,
+          "schemas." + name + ".description",
+          slots.at("description"),
+          module,
+          priority,
+          errors,
+        )
+        targets = result.targets
+        errors = result.errors
+      } else if key == "fields" {
+        if schema.node.kind != "object" {
+          errors.push(
+            "PDF enhancement error in "
+              + module
+              + "\n"
+              + "  schemas."
+              + name
+              + " is not an object schema and has no fields.",
+          )
+          continue
+        }
+        let fields = slots.at("fields")
+        if type(fields) != dictionary {
+          errors.push(
+            "PDF enhancement error in "
+              + module
+              + "\n"
+              + "  schemas."
+              + name
+              + ".fields must be a dictionary.",
+          )
+          continue
+        }
+        for (field-name, value) in fields {
+          let property = schema.node.properties.find(item => (
+            item.name == field-name
+          ))
+          if property == none {
+            errors.push(
+              "PDF enhancement error in "
+                + module
+                + "\n"
+                + "  Unknown field "
+                + repr(field-name)
+                + " on schema "
+                + repr(name)
+                + ".",
+            )
+            continue
+          }
+          let result = enhancement-register(
+            targets,
+            "schemas." + name + ".fields." + field-name + ".description",
+            value,
+            module,
+            priority,
+            errors,
+          )
+          targets = result.targets
+          errors = result.errors
+        }
+      } else {
+        errors.push(
+          "PDF enhancement error in "
+            + module
+            + "\n"
+            + "  schemas."
+            + name
+            + " has unknown slot "
+            + repr(key)
+            + ". Allowed: description, fields.",
+        )
+      }
+    }
+  }
+  (targets: targets, errors: errors)
+}
+
+#let enhancement-resolve(spec, groups, spec-id, show-markers) = {
+  let errors = ()
+  let targets = (:)
+  if groups.len() > 0 and spec-id == "" {
+    errors.push(
+      "PDF enhancement error: enhancement modules were found but the spec has no identity.\n"
+        + "  Add x-spec-id to the OpenAPI document or pass --spec-id/SPEC_ID.",
+    )
+  }
+  for group in groups {
+    let module = group.at("path", default: "<unknown module>")
+    let meta = group.at("meta", default: none)
+    let overrides = group.at("overrides", default: none)
+    if type(meta) != dictionary {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  meta must be a dictionary with version, specs and optional priority.",
+      )
+      continue
+    }
+    for key in meta.keys() {
+      if key not in ("version", "specs", "priority") {
+        errors.push(
+          "PDF enhancement error in "
+            + module
+            + "\n"
+            + "  Unknown meta key "
+            + repr(key)
+            + ". Allowed: version, specs, priority.",
+        )
+      }
+    }
+    if meta.at("version", default: none) != 1 {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  Unsupported meta.version; this build supports version 1.",
+      )
+    }
+    let specs = meta.at("specs", default: none)
+    if type(specs) != array or specs.len() == 0 {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  meta.specs must be a non-empty array of spec ids.",
+      )
+      continue
+    }
+    for spec-name in specs {
+      if type(spec-name) != str {
+        errors.push(
+          "PDF enhancement error in "
+            + module
+            + "\n"
+            + "  meta.specs must contain only strings.",
+        )
+      }
+    }
+    let priority = meta.at("priority", default: 0)
+    if type(priority) != int or priority < 0 {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  meta.priority must be a non-negative integer.",
+      )
+      priority = 0
+    }
+    if spec-id == "" or spec-id not in specs { continue }
+    if type(overrides) != dictionary {
+      errors.push(
+        "PDF enhancement error in "
+          + module
+          + "\n"
+          + "  overrides must be a dictionary.",
+      )
+      continue
+    }
+    for section in overrides.keys() {
+      if section not in ("overview", "tags", "operations", "schemas") {
+        errors.push(
+          "PDF enhancement error in "
+            + module
+            + "\n"
+            + "  Unknown section "
+            + repr(section)
+            + ". Allowed: overview, tags, operations, schemas.",
+        )
+        continue
+      }
+      let value = overrides.at(section)
+      if type(value) != dictionary {
+        errors.push(
+          "PDF enhancement error in "
+            + module
+            + "\n"
+            + "  "
+            + section
+            + " must be a dictionary.",
+        )
+        continue
+      }
+      let result = if section == "overview" {
+        enhancement-validate-overview(value, module, priority, targets, errors)
+      } else if section == "tags" {
+        enhancement-validate-tags(
+          spec,
+          value,
+          module,
+          priority,
+          targets,
+          errors,
+        )
+      } else if section == "operations" {
+        enhancement-validate-operations(
+          spec,
+          value,
+          module,
+          priority,
+          targets,
+          errors,
+        )
+      } else {
+        enhancement-validate-schemas(
+          spec,
+          value,
+          module,
+          priority,
+          targets,
+          errors,
+        )
+      }
+      targets = result.targets
+      errors = result.errors
+    }
+  }
+  if errors.len() > 0 {
+    panic("PDF enhancement validation failed:\n\n" + errors.join("\n\n"))
+  }
+  let visible = (:)
+  for key in targets.keys() {
+    visible.insert(key, targets.at(key).visible)
+  }
+  (targets: targets, visible: visible, show-markers: show-markers)
+}
+
+#let enhancement-apply(target, default) = {
+  let state = enhancement-state.get()
+  let record = state.targets.at(target, default: none)
+  if record == none { return default }
+  if record.replace != none { return record.replace }
+  let parts = ()
+  if record.prepend != [] { parts.push(record.prepend) }
+  if default != none { parts.push(default) }
+  if record.append != [] { parts.push(record.append) }
+  if parts.len() == 0 { return [] }
+  let out = []
+  for (index, part) in parts.enumerate() {
+    if index > 0 { out = out + v(0.3em) }
+    out = out + part
+  }
+  out
+}
+
+#let enhancement-visible(target) = {
+  enhancement-state.get().visible.at(target, default: false)
+}
+
+#let enhancement-any(prefix) = {
+  let state = enhancement-state.get()
+  for key in state.visible.keys() {
+    if state.visible.at(key) and key.starts-with(prefix) { return true }
+  }
+  false
+}
+
+#let enhancement-chip() = {
+  let state = enhancement-state.get()
+  if not state.show-markers { return }
+  box(
+    fill: rgb("#EAF4EC"),
+    stroke: 0.5pt + rgb("#C9E7D1"),
+    radius: 3pt,
+    inset: (x: 5.5pt, y: 2pt),
+    text(
+      font: mono-font,
+      size: 7.1pt,
+      weight: 600,
+      fill: rgb("#067647"),
+      "PDF enhancement",
+    ),
+  )
+}
+
+#let enhancement-appendix() = {
+  let state = enhancement-state.get()
+  if not state.show-markers or state.targets.len() == 0 { return }
+  heading(level: 1, outlined: true)[PDF Enhancements]
+  md(
+    "The following enhancements replace or extend prose from the source OpenAPI document. They are applied at PDF build time and do not change the API contract.",
+  )
+  let cells = ()
+  for target in state.targets.keys().sorted() {
+    let record = state.targets.at(target)
+    cells.push(text(font: mono-font, size: 6.8pt, fill: muted, record.path))
+    cells.push(text(size: 7.2pt, fill: muted, str(record.priority)))
+    cells.push(block(spacing: 1pt, {
+      text(font: mono-font, size: 6.8pt, fill: ink, target)
+      linebreak()
+      text(size: 6.7pt, fill: faint, record.mode)
+    }))
+  }
+  table(
+    columns: (1.35fr, 0.42fr, 2.4fr),
+    stroke: (x: none, y: 0.4pt + border),
+    inset: (x: 6pt, y: 5pt),
+    align: (left, center, left),
+    table.header(
+      repeat: true,
+      table.cell(fill: surface)[#field-label("Module")],
+      table.cell(fill: surface, align: center)[#field-label("Priority")],
+      table.cell(fill: surface)[#field-label("Enhancement")],
+    ),
+    ..cells,
+  )
+}
+
+
 #let code-block(source) = raw(source, lang: "json", block: true)
 
 
@@ -362,7 +1100,7 @@
   }
 }
 
-#let schema-props-table(node) = {
+#let schema-props-table(node, schema-name: "") = {
   let cells = ()
   for property in node.properties {
     let type-cell = block(spacing: 1.5pt, {
@@ -388,7 +1126,20 @@
       }
     })
     let description-cell = block(spacing: 1.5pt, {
-      md-inline(property.description)
+      let description-default = md-inline(property.description)
+      let description = if schema-name != "" {
+        enhancement-apply(
+          "schemas."
+            + schema-name
+            + ".fields."
+            + property.name
+            + ".description",
+          description-default,
+        )
+      } else {
+        description-default
+      }
+      description
       if (
         property.example-short != none
           and (
@@ -434,11 +1185,11 @@
   )
 }
 
-#let schema-body(node, depth: 0) = {
+#let schema-body(node, depth: 0, schema-name: "") = {
   if node == none { return }
   if node.kind == "object" {
     if node.properties.len() > 0 {
-      schema-props-table(node)
+      schema-props-table(node, schema-name: schema-name)
     } else {
       text(size: 8pt, fill: muted)[Free-form object.]
     }
@@ -543,9 +1294,16 @@
         }
       },
     )
-    if schema.description != "" { md(schema.description) }
+    if enhancement-any("schemas." + schema.name + ".") {
+      block(above: 1pt, below: 2pt, enhancement-chip())
+    }
+    let description = enhancement-apply(
+      "schemas." + schema.name + ".description",
+      if schema.description != "" { md(schema.description) } else { none },
+    )
+    if description != none and description != [] { description }
     v(if compact { 1pt } else { 2pt })
-    schema-body(schema.node)
+    schema-body(schema.node, schema-name: schema.name)
     v(if compact { 8pt } else { 16pt }, weak: true)
   }
   if compact or schema.property-count <= 6 {
@@ -568,7 +1326,14 @@
         ink-color: accent-ink,
       )
     })
-    if schema.description != "" { md(schema.description) }
+    if enhancement-any("schemas." + schema.name + ".") {
+      block(above: 1pt, below: 2pt, enhancement-chip())
+    }
+    let description = enhancement-apply(
+      "schemas." + schema.name + ".description",
+      if schema.description != "" { md(schema.description) } else { none },
+    )
+    if description != none and description != [] { description }
     let cells = ()
     for property in schema.node.properties {
       cells.push(text(font: mono-font, size: 7.4pt, weight: 600, property.name))
@@ -615,7 +1380,14 @@
         text(font: mono-font, size: 7.2pt, fill: accent, schema.diff-from),
       )
     })
-    if schema.description != "" { md(schema.description) }
+    if enhancement-any("schemas." + schema.name + ".") {
+      block(above: 1pt, below: 2pt, enhancement-chip())
+    }
+    let description = enhancement-apply(
+      "schemas." + schema.name + ".description",
+      if schema.description != "" { md(schema.description) } else { none },
+    )
+    if description != none and description != [] { description }
     if schema.diff-changes.len() == 0 {
       text(
         size: 7.6pt,
@@ -742,7 +1514,7 @@
   )
 }
 
-#let params-table(params) = {
+#let params-table(params, operation-id: "") = {
   let cells = ()
   for parameter in params {
     cells.push(block({
@@ -766,7 +1538,21 @@
       text(size: 7.2pt, fill: faint, "—")
     })
     cells.push(block(spacing: 1.5pt, {
-      md-inline(parameter.description)
+      let description-default = md-inline(parameter.description)
+      let description = if operation-id != "" {
+        enhancement-apply(
+          "operations."
+            + operation-id
+            + ".parameters."
+            + parameter.location
+            + "."
+            + parameter.name,
+          description-default,
+        )
+      } else {
+        description-default
+      }
+      description
       if parameter.example-short != none {
         text(size: 6.7pt, fill: muted, "  ·  Example: ")
         text(font: mono-font, size: 6.7pt, fill: muted, parameter.example-short)
@@ -789,14 +1575,25 @@
   )
 }
 
-#let request-body-section(body) = {
+#let request-body-section(body, operation-id: "") = {
   subsection(
     "Request body",
     trailing: if body.required {
       text(size: 7pt, weight: 600, fill: rgb("#B54708"), "Required")
     } else { text(size: 7pt, fill: faint, "Optional") },
   )
-  if body.description != "" { md(body.description) }
+  let description-default = if body.description != "" {
+    md(body.description)
+  } else { none }
+  let description = if operation-id != "" {
+    enhancement-apply(
+      "operations." + operation-id + ".requestBody",
+      description-default,
+    )
+  } else {
+    description-default
+  }
+  if description != none and description != [] { description }
   for content in body.content {
     let model = content.request-model
     block(breakable: false, {
@@ -1069,6 +1866,11 @@
   let op-label = if op.operation-id != "" { op.operation-id } else {
     op.heading
   }
+  let purpose-default = if op.purpose != "" { md(op.purpose) } else { none }
+  let purpose-content = enhancement-apply(
+    "operations." + op.operation-id + ".purpose",
+    purpose-default,
+  )
   block(breakable: false, {
     [#heading(level: 2, outlined: true)[#op.heading]#label(
         "operation-" + op-label,
@@ -1087,7 +1889,13 @@
       v(4pt)
       line(length: 100%, stroke: 0.7pt + border)
     })
-    if op.purpose != "" and op.purpose.len() < 500 { md(op.purpose) }
+    if (
+      op.purpose.len() < 500
+        and purpose-content != none
+        and purpose-content != []
+    ) {
+      purpose-content
+    }
     block(above: 4pt, {
       text(size: 7.4pt, fill: muted, "Authentication: ")
       requirement-display(op.security)
@@ -1098,7 +1906,16 @@
       }
     })
   })
-  if op.purpose.len() >= 500 { md(op.purpose) }
+  if enhancement-any("operations." + op.operation-id + ".") {
+    block(above: 2pt, below: 2pt, enhancement-chip())
+  }
+  if (
+    op.purpose.len() >= 500
+      and purpose-content != none
+      and purpose-content != []
+  ) {
+    purpose-content
+  }
   let groups = (
     ("path", "Path parameters"),
     ("query", "Query parameters"),
@@ -1113,22 +1930,30 @@
       if items.len() <= 8 {
         block(breakable: false, {
           subsection(title)
-          params-table(items)
+          params-table(items, operation-id: op.operation-id)
         })
       } else {
         subsection(title)
-        params-table(items)
+        params-table(items, operation-id: op.operation-id)
       }
     }
   }
-  if op.request-body != none { request-body-section(op.request-body) }
+  if op.request-body != none {
+    request-body-section(op.request-body, operation-id: op.operation-id)
+  }
   responses-section(spec, op)
-  if op.notes-first != "" {
+  let notes-default = []
+  if op.notes-first != "" { notes-default = notes-default + md(op.notes-first) }
+  if op.notes-rest != "" { notes-default = notes-default + md(op.notes-rest) }
+  let notes-content = enhancement-apply(
+    "operations." + op.operation-id + ".notes",
+    notes-default,
+  )
+  if notes-content != none and notes-content != [] {
     block(breakable: false, {
       subsection("Notes & prerequisites")
-      md(op.notes-first)
+      notes-content
     })
-    if op.notes-rest != "" { md(op.notes-rest) }
   }
   if op.external-docs != none {
     v(6pt)
@@ -1145,7 +1970,14 @@
 
 #let overview(spec) = {
   heading(level: 1, outlined: true)[Overview]
-  if spec.description != "" { md(spec.description) }
+  if enhancement-visible("overview.description") {
+    block(above: 2pt, below: 2pt, enhancement-chip())
+  }
+  let description = enhancement-apply(
+    "overview.description",
+    if spec.description != "" { md(spec.description) } else { none },
+  )
+  if description != none and description != [] { description }
   v(8pt)
   grid(
     columns: (1fr, 1fr, 1fr, 1fr),
@@ -1750,9 +2582,20 @@
 
 #let tag-section(spec, tag) = {
   [#heading(level: 1, outlined: true)[#tag.name]#label("tag-" + tag.name)]
+  if enhancement-visible("tags." + tag.name + ".description") {
+    block(above: 2pt, below: 2pt, enhancement-chip())
+  }
   block(width: 100%, below: 6pt, {
-    text(size: 8.6pt, fill: muted, tag.description)
-    h(8pt)
+    let description = enhancement-apply(
+      "tags." + tag.name + ".description",
+      if tag.description != "" {
+        text(size: 8.6pt, fill: muted, tag.description)
+      } else { none },
+    )
+    if description != none and description != [] {
+      description
+      h(8pt)
+    }
     chip(
       (
         if tag.operation-count == 1 { "1 endpoint" } else {
@@ -2045,7 +2888,19 @@
 
 // --------------------------------------------------------------- document ---
 
-#let api-document(spec) = {
+#let api-document(
+  spec,
+  enhancement-groups: (),
+  spec-id: "",
+  show-enhancements: true,
+) = {
+  let resolved-enhancements = enhancement-resolve(
+    spec,
+    enhancement-groups,
+    spec-id,
+    show-enhancements,
+  )
+  enhancement-state.update(resolved-enhancements)
   set document(
     title: spec.title + " " + spec.version,
     author: if spec.contact != none and spec.contact.name != "" {
@@ -2138,18 +2993,21 @@
     }
   }
 
-  cover(spec)
-  toc-page(spec)
-  counter(page).update(1)
-  overview(spec)
-  authentication-section(spec)
-  request-conventions(spec)
-  response-conventions(spec)
-  endpoint-summary(spec)
-  for tag in spec.tags {
-    tag-section(spec, tag)
+  context {
+    cover(spec)
+    toc-page(spec)
+    counter(page).update(1)
+    overview(spec)
+    authentication-section(spec)
+    request-conventions(spec)
+    response-conventions(spec)
+    endpoint-summary(spec)
+    for tag in spec.tags {
+      tag-section(spec, tag)
+    }
+    data-models-section(spec)
+    enum-section(spec)
+    specification-notes-section(spec)
+    enhancement-appendix()
   }
-  data-models-section(spec)
-  enum-section(spec)
-  specification-notes-section(spec)
 }

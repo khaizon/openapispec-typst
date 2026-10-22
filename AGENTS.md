@@ -92,8 +92,12 @@ build/generated/data.typ ---> templates/main.typ
   quoted.
 - `src/cli.ts`: `--check`, `--out-dir`, `--json`, `--index-template`,
   `--index-out`, `--pdf-name`, `--date`, `--mode`.
-- `src/build.ts`: writes generated data and the landing page, calls
-  `typst.compile(input, output, { root })`, then atomically publishes.
+- `src/build.ts`: writes generated data, the generated enhancement bundle
+  and the landing page, calls `typst.compile(input, output, { root })`, then
+  atomically publishes.
+- `src/enhancements.ts`: discovers self-declaring Typst enhancement modules,
+  resolves the spec identity, and writes
+  `build/generated/enhancements.typ`.
 - `src/setup-typst.ts`: the `typst` npm package bundles Typst 0.10, so
   postinstall replaces its binary with the official 0.15.1 CLI from
   `@flukxr/typst-cli`. Keep the typed `typst.compile()` usage; replace this shim
@@ -104,7 +108,8 @@ build/generated/data.typ ---> templates/main.typ
 Top level: `openapi, title, version, description, terms-of-service, contact,
 license, servers, tags, security-schemes, authentication, operations, schemas,
 data-models, named-responses, named-parameters, response-groups, error-reference,
-conventions, enum-reference, specification-notes, config, stats, generated`.
+conventions, enum-reference, specification-notes, config, stats, generated,
+spec-id`. `spec-id` is added by the build from `x-spec-id` (or `--spec-id`).
 
 - `operations[]`: `method, path, summary, heading, description, purpose, notes,
   notes-first, notes-rest, tag, tags, operation-id, deprecated, security,
@@ -145,11 +150,54 @@ conventions, enum-reference, specification-notes, config, stats, generated`.
 - `stats`: paths, operations, tags, schemas, named responses/parameters
   (tests assert the PocketDex counts).
 
+## PDF enhancements
+
+The OpenAPI document remains the source of the API contract. A sidecar Typst
+layer can replace or extend prose only. Default discovery is recursive
+`overrides/**/*.typ`; files beginning with `_` are helper modules and are ignored.
+`--overrides <file|dir>` replaces default discovery, must resolve inside the project
+root, and missing/empty explicit paths are errors.
+
+Each module exports:
+
+```typst
+#let meta = (
+  version: 1,
+  specs: ("pocketdex",), // exact x-spec-id values
+  priority: 0,           // optional, non-negative integer
+)
+#let overrides = ( ... )
+```
+
+- `version` must be `1`; unknown `meta` keys fail.
+- `specs` must be a non-empty array; every listed spec must contain every target.
+- `x-spec-id` is required when enhancement modules are discovered; `--spec-id`/
+  `SPEC_ID` wins when provided.
+- Target tree: `overview.description`; `tags.<name>.description`;
+  `operations.<operationId>.purpose|notes|requestBody`;
+  `operations.<id>.parameters.<location>.<name>`;
+  `schemas.<name>.description`; `schemas.<name>.fields.<property>.description`.
+- Operations use `operationId` only; schema fields are top-level only.
+- A content block replaces. `(prepend: [...])`, `(append: [...])`, or both keep the
+  source. `[]` explicitly removes prose. Arbitrary Typst is allowed; field and
+  parameter slots are table cells, so keep those inline.
+- Conflicts use module priority (higher wins); equal highest priority is an
+  error. All applicable modules are validated, including shadowed ones.
+- Errors are aggregated by Typst and include module path, target, slot and
+  conflict details.
+- By default the PDF shows **PDF enhancement** chips and a final **PDF
+  Enhancements** appendix. `--hide-enhancements` / `HIDE_ENHANCEMENTS=1` hides both
+  markers but still applies and validates content.
+- Build generates `build/generated/enhancements.typ` from the discovered modules; never
+  edit it. The sample module is `overrides/pocketdex.typ`.
+
 ## Commands
 
 ```bash
 npm install     # installs deps and aligns the npm typst binary
 npm run build   # typecheck -> normalise -> typst.compile() -> dist/
+npm run build -- --overrides overrides/pocketdex.typ
+npm run build -- --hide-enhancements
 npm run check   # node:test suite via tsx
 npm run serve   # static server for dist/ on :8000
 npm run fmt     # typstyle -i templates/
@@ -157,8 +205,9 @@ npm run typecheck
 make build MODE=concise
 ```
 
-`npm run build` honours `SPEC`, `NAME`, `MODE` and `BUILD_DATE`. Flags are also
-accepted: `npm run build -- --mode concise --name my-api`.
+`npm run build` honours `SPEC`, `NAME`, `MODE`, `BUILD_DATE`, `OVERRIDES`,
+`SPEC_ID` and `HIDE_ENHANCEMENTS`. Flags are also accepted:
+`npm run build -- --mode concise --name my-api --overrides <path> --hide-enhancements`.
 
 ## TypeScript / npm notes
 
@@ -174,8 +223,10 @@ accepted: `npm run build -- --mode concise --name my-api`.
 
 ## Typst notes and gotchas
 
-- `templates/main.typ` imports `/build/generated/data.typ` and calls
-  `api-document(spec)`. Compile with root `.` (passed through the npm API).
+- `templates/main.typ` imports `/build/generated/data.typ` and
+  `/build/generated/enhancements.typ`, then calls
+  `api-document(spec, enhancement-groups: ..., spec-id: ..., show-enhancements: ...)`.
+  Compile with root `.` (passed through the npm API).
 - `@preview/cmarker:0.1.6` renders Markdown descriptions; examples are raw JSON.
 - `@preview/merman:0.5.0` renders fenced `mermaid` blocks as SVG through a
   document-wide raw-block show rule. merman requires Typst 0.15+. Keep the

@@ -18,6 +18,11 @@ describe("fixture compilation", () => {
         mkdirSync(join(temp, "build", "generated"), { recursive: true });
         const model = buildModel(loadSpec(join(FIXTURES, fixture)), PINNED_DATE, { mode: "reference" });
         writeFileSync(join(temp, "build", "generated", "data.typ"), typstDocument(model), "utf-8");
+        writeFileSync(
+          join(temp, "build", "generated", "enhancements.typ"),
+          '#let enhancement-spec-id = ""\n#let show-enhancements = true\n#let enhancement-groups = ()\n',
+          "utf-8",
+        );
         ensureTypstBinary();
         const output = join(temp, "out.pdf");
         await typst.compile(join(temp, "templates", "main.typ"), output, { root: temp });

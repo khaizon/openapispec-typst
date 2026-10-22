@@ -3,13 +3,18 @@ SPEC ?= specs/pocketdex.yaml
 NAME ?= pocketdex
 MODE ?= reference
 BUILD_DATE ?=
+OVERRIDES ?=
+SPEC_ID ?=
+HIDE_ENHANCEMENTS ?=
 
 .PHONY: all build check typecheck fmt fmt-check serve watch tools clean
 
 all: build
 
 build:
-	SPEC="$(SPEC)" NAME="$(NAME)" MODE="$(MODE)" BUILD_DATE="$(BUILD_DATE)" $(NPM) run build
+	SPEC="$(SPEC)" NAME="$(NAME)" MODE="$(MODE)" BUILD_DATE="$(BUILD_DATE)" \
+	OVERRIDES="$(OVERRIDES)" SPEC_ID="$(SPEC_ID)" HIDE_ENHANCEMENTS="$(HIDE_ENHANCEMENTS)" \
+	$(NPM) run build
 
 check:
 	$(NPM) run check

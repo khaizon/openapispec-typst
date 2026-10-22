@@ -1,4 +1,5 @@
 openapi: 3.1.0
+x-spec-id: pocketdex
 info:
   title: PocketDex API
   version: 1.0.0

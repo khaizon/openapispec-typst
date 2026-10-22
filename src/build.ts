@@ -4,6 +4,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as typst from "typst";
 import { renderIndex } from "./cli.js";
+import {
+  EnhancementError,
+  discoverEnhancementModules,
+  resolveSpecId,
+  writeEnhancementBundle,
+} from "./enhancements.js";
 import { buildModel } from "./model.js";
 import { ensureTypstBinary } from "./setup-typst.js";
 import { SpecError, loadSpec, validateRefs } from "./spec.js";
@@ -17,6 +23,9 @@ export interface BuildOptions {
   mode?: string;
   date?: string;
   root?: string;
+  overrides?: string;
+  specId?: string;
+  hideEnhancements?: boolean;
 }
 
 export interface BuildResult {
@@ -45,14 +54,35 @@ export async function buildDocument(options: BuildOptions = {}): Promise<BuildRe
   const doc = loadSpec(specPath);
   const problems = validateRefs(doc);
   if (problems.length > 0) throw new SpecError(problems.join("\n"));
+
+  const modules = discoverEnhancementModules(root, options.overrides);
+  const specId = resolveSpecId(doc, options.specId);
+  if (modules.length > 0 && !specId) {
+    throw new EnhancementError(
+      "enhancement modules were found, but the spec has no identity. "
+        + "Add x-spec-id to the OpenAPI document or pass --spec-id/SPEC_ID.",
+    );
+  }
+
   const spec = buildModel(doc, date, { mode });
+  spec["spec-id"] = specId;
 
   const generatedDir = join(root, "build", "generated");
   mkdirSync(generatedDir, { recursive: true });
   const dataPath = join(generatedDir, "data.typ");
   writeFileSync(dataPath, typstDocument(spec), "utf-8");
   writeFileSync(join(generatedDir, "spec.json"), JSON.stringify(spec, null, 2) + "\n", "utf-8");
+  const enhancementPath = join(generatedDir, "enhancements.typ");
+  writeFileSync(
+    enhancementPath,
+    writeEnhancementBundle(root, modules, specId, !options.hideEnhancements),
+    "utf-8",
+  );
   console.log("wrote " + dataPath);
+  console.log(
+    "enhancements: " + modules.length + " module(s), spec id "
+      + (specId ? JSON.stringify(specId) : "(none)"),
+  );
 
   const template = readFileSync(join(root, "templates", "index.html"), "utf-8");
   const indexHtml = renderIndex(template, spec, name + ".pdf");
