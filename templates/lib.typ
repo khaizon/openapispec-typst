@@ -2049,7 +2049,7 @@
       grid(
         columns: (auto, 1fr, auto),
         column-gutter: 9pt,
-        align: (left, left, right),
+        align: (left + horizon, left + horizon, right + horizon),
         method-badge(op.method),
         text(font: mono-font, size: 9.4pt, fill: ink, path-display(op.path)),
         block({
