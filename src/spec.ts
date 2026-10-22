@@ -33,9 +33,9 @@ export function loadSpec(path: string): Dict {
   if (!version) {
     throw new SpecError(path + ": missing required 'openapi' field");
   }
-  if (!version.startsWith("3.1")) {
+  if (!/^3\.(0|1)\./.test(version)) {
     throw new SpecError(
-      path + ": unsupported OpenAPI version " + JSON.stringify(version) + "; this converter targets 3.1.x",
+      path + ": unsupported OpenAPI version " + JSON.stringify(version) + "; this converter targets 3.0.x and 3.1.x",
     );
   }
   if (document.paths === null || typeof document.paths !== "object" || Array.isArray(document.paths)) {

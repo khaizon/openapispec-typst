@@ -80,12 +80,11 @@ describe("converter CLI", () => {
     assert.match(result.stderr, /shared\.yaml/);
   });
 
-  test("OpenAPI 3.0 is rejected", () => {
+  test("OpenAPI 3.0 is accepted", () => {
     const tmp = tempDir();
     const result = runCli([join(FIXTURES, "openapi30.yaml"), "--out-dir", join(tmp, "gen")]);
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /unsupported OpenAPI version/);
-    assert.match(result.stderr, /3\.0\.3/);
+    assert.equal(result.status, 0);
+    assert.ok(existsSync(join(tmp, "gen", "data.typ")), "3.0 fixture should normalise");
   });
 
   test("missing spec reports a clean error", () => {

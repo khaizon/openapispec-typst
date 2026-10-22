@@ -72,6 +72,21 @@ export function jsonPretty(value: any): string {
   return JSON.stringify(value, (_key, item) => (item === undefined ? null : item), 2);
 }
 
+// Examples are representative, not exhaustive. Payloads longer than this
+// many pretty-printed lines are cut with an explicit marker so the PDF
+// renders them as one unbreakable block; full payloads stay in the YAML.
+export const EXAMPLE_MAX_LINES = 46;
+
+export function exampleJson(value: any): string {
+  const nl = String.fromCharCode(10);
+  const text = jsonPretty(value);
+  const lines = text.split(nl);
+  if (lines.length <= EXAMPLE_MAX_LINES) return text;
+  const head = lines.slice(0, EXAMPLE_MAX_LINES).join(nl);
+  const note = '... example truncated: first ' + EXAMPLE_MAX_LINES + ' of ' + lines.length + ' lines';
+  return head + nl + '"' + note + '"';
+}
+
 export function jsonCompact(value: any): string {
   return JSON.stringify(value, (_key, item) => (item === undefined ? null : item));
 }
@@ -430,7 +445,7 @@ export class Model {
     return {
       name,
       summary,
-      "value-json": jsonPretty(value),
+      "value-json": exampleJson(value),
       "value-short": truncate(displayValue(value), 90),
     };
   }
@@ -674,8 +689,10 @@ export class Model {
       const body = operation["request-body"];
       if (!body) continue;
       for (const entry of body.content) {
-        const model = this.requestModel(entry.schema, schemaByName);
-        if (model) entry["request-model"] = model;
+        // Always emit the key: templates read content.request-model directly,
+        // and a null encodes as Typst none which they already handle with a
+        // plain "Schema: <type>" fallback (e.g. array or primitive bodies).
+        entry["request-model"] = this.requestModel(entry.schema, schemaByName);
       }
     }
   }

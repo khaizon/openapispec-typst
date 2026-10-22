@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as typst from "typst";
@@ -17,6 +17,12 @@ export interface BuildOptions {
   mode?: string;
   date?: string;
   root?: string;
+  /** Directory the PDF is published to. Defaults to <root>/dist. */
+  outDir?: string;
+  /** Also render the per-document landing page (dist/index.html). */
+  index?: boolean;
+  /** Directory with additional fonts. Defaults to <root>/fonts when present. */
+  fontPath?: string;
 }
 
 export interface BuildResult {
@@ -31,7 +37,14 @@ function pagesOf(pdf: string): number | null {
     const match = /^Pages:\s+(\d+)/m.exec(output);
     return match ? Number(match[1]) : null;
   } catch {
-    return null;
+    // pdfinfo is unavailable; fall back to the macOS metadata indexer.
+    try {
+      const output = execFileSync("mdls", ["-name", "kMDItemNumberOfPages", "-raw", pdf], { encoding: "utf-8" });
+      const pages = Number(output.trim());
+      return Number.isFinite(pages) && pages > 0 ? pages : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -41,6 +54,9 @@ export async function buildDocument(options: BuildOptions = {}): Promise<BuildRe
   const name = options.name ?? "pocketdex";
   const mode = options.mode ?? "reference";
   const date = options.date ?? new Date().toISOString().slice(0, 10);
+
+  const outDir = options.outDir ?? join(root, "dist");
+  const withIndex = options.index === true;
 
   const doc = loadSpec(specPath);
   const problems = validateRefs(doc);
@@ -54,27 +70,39 @@ export async function buildDocument(options: BuildOptions = {}): Promise<BuildRe
   writeFileSync(join(generatedDir, "spec.json"), JSON.stringify(spec, null, 2) + "\n", "utf-8");
   console.log("wrote " + dataPath);
 
-  const template = readFileSync(join(root, "templates", "index.html"), "utf-8");
-  const indexHtml = renderIndex(template, spec, name + ".pdf");
-  writeFileSync(join(root, "build", "index.html"), indexHtml, "utf-8");
+  let indexHtml: string | null = null;
+  if (withIndex) {
+    const template = readFileSync(join(root, "templates", "index.html"), "utf-8");
+    indexHtml = renderIndex(template, spec, name + ".pdf");
+    writeFileSync(join(root, "build", "index.html"), indexHtml, "utf-8");
+  }
 
   ensureTypstBinary();
-  mkdirSync(join(root, "dist"), { recursive: true });
+  mkdirSync(outDir, { recursive: true });
   const tmpPdf = join(root, "build", name + ".tmp.pdf");
   rmSync(tmpPdf, { force: true });
+  const fontPath = options.fontPath ?? (existsSync(join(root, "fonts")) ? join(root, "fonts") : undefined);
   console.log("==> compiling templates/main.typ with typst npm API");
-  await typst.compile(join(root, "templates", "main.typ"), tmpPdf, { root });
-  const pdf = join(root, "dist", name + ".pdf");
+  await typst.compile(join(root, "templates", "main.typ"), tmpPdf, {
+    root,
+    ...(fontPath ? { fontPath } : {}),
+  });
+  const pdf = join(outDir, name + ".pdf");
   renameSync(tmpPdf, pdf);
   chmodSync(pdf, 0o644);
 
-  const indexOut = join(root, "dist", "index.html");
-  const tmpIndex = join(root, "dist", ".index." + process.pid + ".html");
-  writeFileSync(tmpIndex, indexHtml, "utf-8");
-  chmodSync(tmpIndex, 0o644);
-  renameSync(tmpIndex, indexOut);
+  if (withIndex && indexHtml) {
+    const indexOut = join(outDir, "index.html");
+    const tmpIndex = join(outDir, ".index." + process.pid + ".html");
+    writeFileSync(tmpIndex, indexHtml, "utf-8");
+    chmodSync(tmpIndex, 0o644);
+    renameSync(tmpIndex, indexOut);
+  }
 
   const pages = pagesOf(pdf);
-  console.log("==> published dist/" + name + ".pdf" + (pages ? " (" + pages + " pages)" : "") + " and dist/index.html");
+  console.log(
+    "==> published " + pdf + (pages ? " (" + pages + " pages)" : "")
+    + (withIndex ? " and its landing page" : ""),
+  );
   return { pdf, pages, spec };
 }

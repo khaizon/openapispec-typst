@@ -10,6 +10,8 @@ const result = await buildDocument({
   name: arg("--name", process.env.NAME),
   mode: arg("--mode", process.env.MODE),
   date: arg("--date", process.env.BUILD_DATE || undefined),
+  outDir: arg("--out-dir", process.env.OUT_DIR),
+  index: process.env.INDEX === "1" || process.argv.includes("--index"),
 });
 console.log(
   "spec: " + result.spec.title + " v" + result.spec.version
