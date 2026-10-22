@@ -2749,13 +2749,13 @@
     cells.push(text(size: 7pt, fill: muted, operation.tag))
   }
   table(
-    columns: (auto, 1.6fr, 1.6fr, 0.8fr),
+    columns: (48pt, 1.6fr, 1.6fr, 0.8fr),
     stroke: (x: none, y: 0.4pt + border),
     inset: (x: 5pt, y: 5pt),
-    align: (left, left, left, left),
+    align: (right + horizon, left + horizon, left + horizon, left + horizon),
     table.header(
       repeat: true,
-      table.cell(fill: surface)[#field-label("Method")],
+      table.cell(fill: surface, align: right)[#field-label("Method")],
       table.cell(fill: surface)[#field-label("Path")],
       table.cell(fill: surface)[#field-label("Purpose")],
       table.cell(fill: surface)[#field-label("Tag")],
