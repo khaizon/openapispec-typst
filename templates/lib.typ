@@ -4,6 +4,7 @@
 // lives here so the document can be restyled without touching Python.
 
 #import "@preview/cmarker:0.1.6": render as cmark
+#import "@preview/merman:0.5.0": show-mermaid-blocks
 
 // ---------------------------------------------------------------- theme ---
 
@@ -2094,14 +2095,25 @@
   set enum(indent: 1em)
   show link: it => text(fill: accent, it)
   show raw: set text(font: mono-font)
-  show raw.where(block: true): block.with(
-    width: 100%,
-    fill: code-bg,
-    stroke: 0.5pt + code-border,
-    radius: 4pt,
-    inset: (x: 9pt, y: 8pt),
-    above: 0.55em,
-    below: 0.55em,
+  show raw.where(block: true): it => {
+    if it.lang == "mermaid" {
+      it
+    } else {
+      block(
+        width: 100%,
+        fill: code-bg,
+        stroke: 0.5pt + code-border,
+        radius: 4pt,
+        inset: (x: 9pt, y: 8pt),
+        above: 0.55em,
+        below: 0.55em,
+      )[#it]
+    }
+  }
+  show raw.where(lang: "mermaid"): show-mermaid-blocks(
+    width: 72%,
+    document-context: true,
+    alt: "Mermaid diagram",
   )
   show raw.where(block: false): set text(size: 0.87em, fill: rgb("#344054"))
   show table: set text(size: 8.25pt, hyphenate: false)

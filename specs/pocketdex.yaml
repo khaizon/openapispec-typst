@@ -412,8 +412,16 @@ paths:
     post:
       operationId: recordEncounter
       summary: Record Encounter
-      description: >-
+      description: |
         Queue a wild encounter report.
+
+        ```mermaid
+        sequenceDiagram
+          participant Trainer
+          participant API
+          Trainer->>API: POST /encounters
+          API-->>Trainer: 202 orderId
+        ```
 
         The service processes encounters asynchronously and returns an order
         identifier that can be used to poll for progress.
@@ -490,7 +498,16 @@ paths:
     get:
       operationId: listRegionHabitats
       summary: List Region Habitats
-      description: List habitats for a region, including nested sub-habitats.
+      description: |
+        List habitats for a region, including nested sub-habitats.
+
+        ```mermaid
+        flowchart TD
+          Region --> Habitats
+          Habitats --> Subhabitats
+        ```
+
+        Use habitat identifiers when filtering species.
       tags: [Regions]
       parameters:
         - $ref: '#/components/parameters/RegionId'

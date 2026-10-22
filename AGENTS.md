@@ -177,6 +177,12 @@ accepted: `npm run build -- --mode concise --name my-api`.
 - `templates/main.typ` imports `/build/generated/data.typ` and calls
   `api-document(spec)`. Compile with root `.` (passed through the npm API).
 - `@preview/cmarker:0.1.6` renders Markdown descriptions; examples are raw JSON.
+- `@preview/merman:0.5.0` renders fenced `mermaid` blocks as SVG through a
+  document-wide raw-block show rule. merman requires Typst 0.15+. Keep the
+  generic raw-block rule skipping `mermaid`; otherwise diagrams become code.
+- The mermaid rule uses `width: 72%` and `document-context: true`; review
+  diagram-heavy pages after changing it. Add Mermaid fences to fixtures when
+  touching Markdown rendering.
 - Dynamic labels must live in markup and attach to a heading:
   `[#heading(...)#label("schema-" + name)]`. Bare `label()` in code produces
   "not attached" warnings.

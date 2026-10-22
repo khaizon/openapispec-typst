@@ -29,6 +29,14 @@ paths:
     get:
       operationId: listWidgets
       summary: List Widgets
+      description: |
+        Return widgets for the current workspace.
+
+        ```mermaid
+        flowchart LR
+          Client --> ListWidgets
+          ListWidgets --> WidgetPage
+        ```
       tags: [Widgets]
       parameters:
         - name: limit

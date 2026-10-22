@@ -11,6 +11,8 @@ customer or third-party API data is included.
 <a href="docs/preview-cover.png"><img src="docs/preview-cover.png" width="49%" alt="Cover page"></a>
 <a href="docs/preview-endpoint.png"><img src="docs/preview-endpoint.png" width="49%" alt="Endpoint page"></a>
 
+<a href="docs/preview-mermaid.png"><img src="docs/preview-mermaid.png" width="100%" alt="Rendered Mermaid diagram"></a>
+
 ## Features
 
 - Designed cover, clickable table of contents, PDF outline/bookmarks, running
@@ -29,6 +31,9 @@ customer or third-party API data is included.
 - **Classified Data Models:** primary models, versioned models rendered as
   diffs against their base version, compact response envelopes, small reusable
   models and helper models.
+- **Mermaid diagrams in Markdown:** fenced `mermaid` code blocks in descriptions
+  are rendered as SVG through [`@preview/merman:0.5.0`](https://typst.app/universe/package/merman/);
+  other code fences stay as code.
 - Enumerations index and Specification Notes for source observations.
 - Three document densities: `concise`, `reference` (default) and `exhaustive`.
 - TypeScript pipeline, npm scripts, atomic build output and fixture tests.
@@ -125,5 +130,8 @@ compilation and the rendered PDF.
 - All characters, species, trainers, regions and items are fictional.
 - `build/` and `node_modules/` are ignored; `dist/` is committed so the
   generated PDF can be downloaded directly from the repository.
-- `@preview/cmarker:0.1.6` is fetched on the first compile and cached by
-  Typst in `~/.cache/typst/packages/`.
+- `@preview/cmarker:0.1.6` and `@preview/merman:0.5.0` are fetched on the first
+  compile and cached by Typst in `~/.cache/typst/packages/`. Merman requires
+  Typst 0.15+, which the project already uses.
+- `npm run check` compiles a fixture containing a Mermaid fence, so diagram
+  support is covered by the test suite.
