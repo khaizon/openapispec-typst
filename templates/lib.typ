@@ -155,9 +155,9 @@
   text(font: mono-font, size: 6.8pt, fill: ink-color, body),
 )
 
-#let method-badge(method) = box(
+#let method-badge(method, badge-align: center) = box(
   width: 44pt,
-  align(center, box(
+  align(badge-align, box(
     fill: method-color(method),
     radius: 3.5pt,
     inset: (x: 7pt, y: 2.6pt),
@@ -2716,7 +2716,7 @@
   )
   let cells = ()
   for operation in spec.operations {
-    cells.push(method-badge(operation.method))
+    cells.push(method-badge(operation.method, badge-align: right))
     cells.push(text(
       font: mono-font,
       size: 7.1pt,
